@@ -124,11 +124,8 @@ impl Engine {
 
         col.insert(doc.clone())?;
 
-        // Atomic write to disk (read-modify-write with exclusive lock)
-        manager::atomic_insert(&self.data_path, collection, vec![doc.clone()])?;
-        // Reload from disk to stay in sync
-        let fresh_docs = crate::storage::file_storage::read_collection(&self.data_path, collection)?;
-        col.documents = fresh_docs;
+        // Append to NDJSON file — O(1), no re-read needed
+        file_storage::append_documents(&self.data_path, collection, &[doc.clone()])?;
         self.invalidate_cache(collection);
 
         Ok(doc)
@@ -159,10 +156,8 @@ impl Engine {
             col.insert(doc.clone())?;
         }
 
-        // Atomic write to disk
-        manager::atomic_insert(&self.data_path, collection, docs.clone())?;
-        let fresh_docs = crate::storage::file_storage::read_collection(&self.data_path, collection)?;
-        col.documents = fresh_docs;
+        // Append all docs to NDJSON file — O(k) for k new docs
+        file_storage::append_documents(&self.data_path, collection, &docs)?;
         self.invalidate_cache(collection);
 
         Ok(docs)
@@ -206,10 +201,9 @@ impl Engine {
             .find_by_id(id)
             .ok_or_else(|| DbError::DocumentNotFound(id.to_string()))?;
 
-        col.update(pos, new_doc.clone())?;
-        manager::atomic_update(&self.data_path, collection, id, new_doc)?;
-        let fresh_docs = crate::storage::file_storage::read_collection(&self.data_path, collection)?;
-        col.documents = fresh_docs;
+        col.update(pos, new_doc)?;
+        // Rewrite entire NDJSON file (updates require full rewrite)
+        file_storage::rewrite_collection(&self.data_path, collection, &col.documents)?;
         self.invalidate_cache(collection);
 
         Ok(())
@@ -231,9 +225,8 @@ impl Engine {
             .ok_or_else(|| DbError::DocumentNotFound(id.to_string()))?;
 
         col.delete(pos)?;
-        manager::atomic_delete(&self.data_path, collection, id)?;
-        let fresh_docs = crate::storage::file_storage::read_collection(&self.data_path, collection)?;
-        col.documents = fresh_docs;
+        // Rewrite entire NDJSON file (deletes require full rewrite)
+        file_storage::rewrite_collection(&self.data_path, collection, &col.documents)?;
         self.invalidate_cache(collection);
 
         Ok(())
