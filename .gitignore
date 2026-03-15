@@ -1,0 +1,43 @@
+# Rust build artifacts
+/target/
+
+# PHP dependencies
+/vendor/
+
+# Runtime data
+/data/collections/*.json
+/data/indexes/*.idx.json
+
+# Logs
+/logs/*.log
+
+# Lock files (keep composer.lock)
+*.lock
+!composer.lock
+
+# Environment
+.env
+
+# Test cache
+.phpunit.result.cache
+.phpunit.cache/
+
+# IDEs
+.idea/
+.vscode/
+.claude/
+*.swp
+*.swo
+*~
+
+# Folders files
+data/
+logs/
+
+# Precompiled binaries (distributed via GitHub Releases)
+/lib/*/libanvildb.*
+/lib/*/anvildb.*
+
+# OS files
+.DS_Store
+Thumbs.db

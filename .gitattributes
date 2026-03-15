@@ -1,0 +1,28 @@
+# Exclude from Composer export (composer archive / --prefer-dist)
+/.claude/            export-ignore
+/.github/            export-ignore
+/rust/tests/         export-ignore
+/tests/              export-ignore
+/data/               export-ignore
+/logs/               export-ignore
+.gitignore           export-ignore
+.gitattributes       export-ignore
+phpunit.xml          export-ignore
+CONTRIBUTING.md      export-ignore
+Cargo.toml           export-ignore
+Cargo.lock           export-ignore
+
+# Ensure consistent line endings
+*.php   text eol=lf
+*.rs    text eol=lf
+*.h     text eol=lf
+*.md    text eol=lf
+*.json  text eol=lf
+*.xml   text eol=lf
+*.yml   text eol=lf
+*.toml  text eol=lf
+
+# Mark binaries
+*.so    binary
+*.dylib binary
+*.dll   binary
