@@ -10,6 +10,54 @@ php benchmarks/benchmark.php 10000
 
 ---
 
+## v0.4.0 — New operators, aggregations, range indexes, CSV
+
+> 2026-03-16 | PHP 8.4.18 | Rust stable | Linux x86_64 | 10,000 records
+
+**CRUD**
+
+| Operation | Time | Throughput |
+|---|---:|---|
+| Bulk insert (10x1000) | 214ms | ~47k docs/s |
+| Read all (10k docs) | 22ms | ~448k docs/s |
+
+**Queries**
+
+| Operation | Time | Results |
+|---|---:|---|
+| Filter (`=` admin) | 4.6ms | 2,500 |
+| Filter + sort + limit(100) | 3.6ms | 100 |
+| whereBetween(age, 30, 50) | 5.1ms | 2,625 |
+| whereIn(role, 2 values) | 9.2ms | 5,000 |
+| whereRegex(name, pattern) | 71.6ms | 100 |
+| Count with filter | 0.4ms | 6,666 |
+
+**Aggregations**
+
+| Operation | Time |
+|---|---:|
+| sum + avg + min + max | 4.1ms |
+| group_by(role) + count + avg | 7.9ms |
+
+**Indexes**
+
+| Operation | Time |
+|---|---:|
+| Create range index | 5.4ms |
+| whereBetween with range index | 4.6ms |
+
+All operations include compression, atomic writes, schema validation, and index enforcement.
+
+### Changes
+
+- New query operators: `between`, `in`, `not_in`, `regex`
+- Aggregations: `sum`, `avg`, `min`, `max`, `count` with optional `group_by`
+- Range indexes (`BTreeMap`) for ordered lookups on `>`, `<`, `>=`, `<=`, `between`
+- CSV export/import
+- Updates and deletes now buffered (mark dirty + background flush)
+
+---
+
 ## v0.3.0 — Compression, encryption, joins, lazy loading
 
 > 2026-03-16 | PHP 8.4.18 | Rust stable | Linux x86_64 | 10,000 records

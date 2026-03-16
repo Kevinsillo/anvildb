@@ -23,7 +23,7 @@ cargo test && ./vendor/bin/phpunit
 cargo test
 ```
 
-41 tests covering:
+51 tests covering:
 - Engine lifecycle (open, close, reopen)
 - Collection CRUD (create, drop, insert, find, update, delete)
 - Query engine (all filter operators, sort, limit, offset)
@@ -32,6 +32,9 @@ cargo test
 - Lazy loading (list without loading, partial loading, lazy join)
 - Compression (transparent, file format verification)
 - Encryption (encrypted DB, encrypt/decrypt existing, wrong key, key required)
+- New operators (between, in, not_in, regex)
+- Aggregations (sum, avg, min, max, count, group_by with filters)
+- Range indexes (create, persist, drop)
 - Index operations (hash, unique, duplicate rejection)
 - Schema validation (valid/invalid documents)
 - Bulk insert

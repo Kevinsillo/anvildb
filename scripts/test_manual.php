@@ -212,9 +212,79 @@ $flushTime = round((microtime(true) - $t0) * 1000, 2);
 echo "Flush a disco: {$flushTime}ms\n";
 
 // ─────────────────────────────────────────────
-// 11. Shutdown limpio
+// 11. Nuevos operadores
 // ─────────────────────────────────────────────
-echo "\n── 11. Shutdown ──\n";
+echo "\n── 11. Nuevos operadores ──\n";
+
+$between = $db->collection('products')->whereBetween('price', 50, 400)->get();
+echo "whereBetween(50, 400): " . implode(', ', array_map(fn($p) => "{$p['name']}(\${$p['price']})", $between)) . "\n";
+
+$in = $db->collection('products')->whereIn('category', ['furniture'])->get();
+echo "whereIn(['furniture']): " . implode(', ', array_map(fn($p) => $p['name'], $in)) . "\n";
+
+$notIn = $db->collection('products')->whereNotIn('category', ['furniture'])->get();
+echo "whereNotIn(['furniture']): " . implode(', ', array_map(fn($p) => $p['name'], $notIn)) . "\n";
+
+$regex = $db->collection('products')->whereRegex('name', '^[A-D]')->get();
+echo "whereRegex('^[A-D]'): " . implode(', ', array_map(fn($p) => $p['name'], $regex)) . "\n";
+
+// ─────────────────────────────────────────────
+// 12. Aggregations
+// ─────────────────────────────────────────────
+echo "\n── 12. Aggregations ──\n";
+
+$agg = $db->collection('products')
+    ->sum('price', 'total')
+    ->avg('price', 'promedio')
+    ->min('price', 'minimo')
+    ->max('price', 'maximo')
+    ->get();
+printf("  sum: $%s | avg: $%s | min: $%s | max: $%s\n",
+    $agg[0]['total'], $agg[0]['promedio'], $agg[0]['minimo'], $agg[0]['maximo']);
+
+// Group by
+$grouped = $db->collection('products')
+    ->groupBy('category', [
+        ['function' => 'count', 'alias' => 'total'],
+        ['function' => 'sum', 'field' => 'price', 'alias' => 'revenue'],
+    ])
+    ->get();
+echo "  Group by category:\n";
+foreach ($grouped as $g) {
+    printf("    %s — %d productos, $%s total\n", $g['category'], $g['total'], $g['revenue']);
+}
+
+// ─────────────────────────────────────────────
+// 13. Range index
+// ─────────────────────────────────────────────
+echo "\n── 13. Range index ──\n";
+
+$db->collection('products')->createIndex('price', 'range');
+echo "Creado range index en products.price\n";
+
+$rangeResults = $db->collection('products')->whereBetween('price', 100, 500)->get();
+echo "Range query (100-500): " . implode(', ', array_map(fn($p) => "{$p['name']}(\${$p['price']})", $rangeResults)) . "\n";
+
+// ─────────────────────────────────────────────
+// 14. CSV export/import
+// ─────────────────────────────────────────────
+echo "\n── 14. CSV export/import ──\n";
+
+$csvPath = $dataPath . '/products_export.csv';
+$exported = $db->collection('products')->exportCsv($csvPath);
+echo "Exportados {$exported} productos a CSV\n";
+
+$db->createCollection('products_imported');
+$imported = $db->collection('products_imported')->importCsv($csvPath);
+echo "Importados {$imported} productos desde CSV\n";
+
+$importedCount = $db->collection('products_imported')->count();
+echo "Count productos importados: {$importedCount}\n";
+
+// ─────────────────────────────────────────────
+// 15. Shutdown limpio
+// ─────────────────────────────────────────────
+echo "\n── 15. Shutdown ──\n";
 
 // Insertar algo más sin flush manual — shutdown debería flushearlo
 $db->collection('buffered')->insert(['idx' => 999, 'data' => 'last_item']);

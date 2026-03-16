@@ -1110,3 +1110,237 @@ fn test_anvil_file_format() {
 
     cleanup(&path);
 }
+
+// ---------------------------------------------------------------------------
+// 13. New query operators
+// ---------------------------------------------------------------------------
+
+/// Helper: set up data for operator tests.
+fn setup_operator_data(engine: &Engine) {
+    engine.create_collection("items").unwrap();
+    engine.insert("items", r#"{"id":"1","name":"Apple","price":1.5,"category":"fruit"}"#).unwrap();
+    engine.insert("items", r#"{"id":"2","name":"Banana","price":0.75,"category":"fruit"}"#).unwrap();
+    engine.insert("items", r#"{"id":"3","name":"Carrot","price":2.0,"category":"vegetable"}"#).unwrap();
+    engine.insert("items", r#"{"id":"4","name":"Dragonfruit","price":5.0,"category":"fruit"}"#).unwrap();
+    engine.insert("items", r#"{"id":"5","name":"Eggplant","price":3.0,"category":"vegetable"}"#).unwrap();
+}
+
+#[test]
+fn test_between_operator() {
+    let path = temp_dir("op_between");
+    let engine = Engine::open(&path, None).unwrap();
+    setup_operator_data(&engine);
+
+    let results = engine.query(r#"{
+        "collection": "items",
+        "filters": [{"field": "price", "op": "between", "value": [1.0, 3.0]}]
+    }"#).unwrap();
+
+    assert_eq!(results.len(), 3); // Apple (1.5), Carrot (2.0), Eggplant (3.0)
+
+    cleanup(&path);
+}
+
+#[test]
+fn test_in_operator() {
+    let path = temp_dir("op_in");
+    let engine = Engine::open(&path, None).unwrap();
+    setup_operator_data(&engine);
+
+    let results = engine.query(r#"{
+        "collection": "items",
+        "filters": [{"field": "name", "op": "in", "value": ["Apple", "Carrot", "Eggplant"]}]
+    }"#).unwrap();
+
+    assert_eq!(results.len(), 3);
+
+    cleanup(&path);
+}
+
+#[test]
+fn test_not_in_operator() {
+    let path = temp_dir("op_not_in");
+    let engine = Engine::open(&path, None).unwrap();
+    setup_operator_data(&engine);
+
+    let results = engine.query(r#"{
+        "collection": "items",
+        "filters": [{"field": "category", "op": "not_in", "value": ["vegetable"]}]
+    }"#).unwrap();
+
+    assert_eq!(results.len(), 3); // Apple, Banana, Dragonfruit
+
+    cleanup(&path);
+}
+
+#[test]
+fn test_regex_operator() {
+    let path = temp_dir("op_regex");
+    let engine = Engine::open(&path, None).unwrap();
+    setup_operator_data(&engine);
+
+    // Match names ending in "t"
+    let results = engine.query(r#"{
+        "collection": "items",
+        "filters": [{"field": "name", "op": "regex", "value": "t$"}]
+    }"#).unwrap();
+
+    assert_eq!(results.len(), 3); // Carrot, Dragonfruit, Eggplant
+
+    cleanup(&path);
+}
+
+// ---------------------------------------------------------------------------
+// 14. Aggregations
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_aggregation_sum_avg_min_max() {
+    let path = temp_dir("agg_basic");
+    let engine = Engine::open(&path, None).unwrap();
+    setup_operator_data(&engine);
+
+    let results = engine.query(r#"{
+        "collection": "items",
+        "aggregate": [
+            {"function": "sum", "field": "price"},
+            {"function": "avg", "field": "price"},
+            {"function": "min", "field": "price"},
+            {"function": "max", "field": "price"},
+            {"function": "count"}
+        ]
+    }"#).unwrap();
+
+    assert_eq!(results.len(), 1);
+    let agg = &results[0];
+    assert_eq!(agg["sum_price"], 12.25);   // 1.5 + 0.75 + 2.0 + 5.0 + 3.0
+    assert_eq!(agg["avg_price"], 2.45);    // 12.25 / 5
+    assert_eq!(agg["min_price"], 0.75);
+    assert_eq!(agg["max_price"], 5.0);
+    assert_eq!(agg["count_*"], 5);
+
+    cleanup(&path);
+}
+
+#[test]
+fn test_aggregation_with_filter() {
+    let path = temp_dir("agg_filter");
+    let engine = Engine::open(&path, None).unwrap();
+    setup_operator_data(&engine);
+
+    let results = engine.query(r#"{
+        "collection": "items",
+        "filters": [{"field": "category", "op": "=", "value": "fruit"}],
+        "aggregate": [
+            {"function": "count"},
+            {"function": "avg", "field": "price", "alias": "avg_fruit_price"}
+        ]
+    }"#).unwrap();
+
+    assert_eq!(results.len(), 1);
+    let agg = &results[0];
+    assert_eq!(agg["count_*"], 3); // Apple, Banana, Dragonfruit
+
+    cleanup(&path);
+}
+
+#[test]
+fn test_group_by() {
+    let path = temp_dir("agg_groupby");
+    let engine = Engine::open(&path, None).unwrap();
+    setup_operator_data(&engine);
+
+    let results = engine.query(r#"{
+        "collection": "items",
+        "group_by": {
+            "fields": ["category"],
+            "aggregations": [
+                {"function": "count", "alias": "total"},
+                {"function": "sum", "field": "price", "alias": "total_price"}
+            ]
+        }
+    }"#).unwrap();
+
+    assert_eq!(results.len(), 2); // fruit, vegetable
+
+    // Find each group
+    let fruit = results.iter().find(|r| r["category"] == "fruit").unwrap();
+    let veg = results.iter().find(|r| r["category"] == "vegetable").unwrap();
+
+    assert_eq!(fruit["total"], 3);
+    assert_eq!(veg["total"], 2);
+    assert_eq!(fruit["total_price"], 7.25); // 1.5 + 0.75 + 5.0
+    assert_eq!(veg["total_price"], 5.0);    // 2.0 + 3.0
+
+    cleanup(&path);
+}
+
+// ---------------------------------------------------------------------------
+// 15. Range indexes
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_range_index_create() {
+    let path = temp_dir("ridx_create");
+    let engine = Engine::open(&path, None).unwrap();
+    setup_operator_data(&engine);
+
+    engine.create_index("items", "price", "range").unwrap();
+
+    // Queries should still work with the range index in place
+    let results = engine.query(r#"{
+        "collection": "items",
+        "filters": [{"field": "price", "op": ">", "value": 2.0}]
+    }"#).unwrap();
+
+    assert_eq!(results.len(), 2); // Dragonfruit (5.0), Eggplant (3.0)
+
+    cleanup(&path);
+}
+
+#[test]
+fn test_range_index_persists() {
+    let path = temp_dir("ridx_persist");
+    {
+        let engine = Engine::open(&path, None).unwrap();
+        engine.create_collection("nums").unwrap();
+        for i in 1..=10 {
+            engine.insert("nums", &format!(r#"{{"id":"{}","val":{}}}"#, i, i)).unwrap();
+        }
+        engine.create_index("nums", "val", "range").unwrap();
+        engine.flush().unwrap();
+    }
+
+    // Reopen and verify index file exists
+    let ridx = std::path::Path::new(&path).join("indexes").join("nums_val.ridx.anvil");
+    assert!(ridx.exists(), ".ridx.anvil file should exist");
+
+    // Reopen and query — should work
+    {
+        let engine = Engine::open(&path, None).unwrap();
+        let count = engine.count("nums", "").unwrap();
+        assert_eq!(count, 10);
+    }
+
+    cleanup(&path);
+}
+
+#[test]
+fn test_range_index_drop() {
+    let path = temp_dir("ridx_drop");
+    let engine = Engine::open(&path, None).unwrap();
+    setup_operator_data(&engine);
+
+    engine.create_index("items", "price", "range").unwrap();
+    engine.drop_index("items", "price").unwrap();
+
+    // Queries should still work after dropping
+    let results = engine.query(r#"{
+        "collection": "items",
+        "filters": [{"field": "price", "op": ">=", "value": 3.0}]
+    }"#).unwrap();
+
+    assert_eq!(results.len(), 2); // Dragonfruit (5.0), Eggplant (3.0)
+
+    cleanup(&path);
+}

@@ -35,7 +35,9 @@
 - **Compression** — all data compressed on disk (deflate), transparent to the API
 - **Encryption at rest** — optional AES-256-GCM, per-file nonce, key as hex string
 - **Lazy loading** — collections loaded on first access, not at startup
-- **In-memory indexes** (hash and unique) for sub-millisecond lookups
+- **In-memory indexes** (hash, unique, and range/BTreeMap) for sub-millisecond lookups
+- **Aggregations** — sum, avg, min, max, count with optional group_by
+- **CSV export/import** for data portability
 - **LRU cache** with automatic invalidation on writes
 - **Atomic writes** via temp file + rename to prevent corruption
 - **Schema validation** to enforce document structure
@@ -122,7 +124,28 @@ $results = $db->collection('users')
     ->get();
 ```
 
-Operators: `=`, `!=`, `>`, `<`, `>=`, `<=`, `contains`.
+Operators: `=`, `!=`, `>`, `<`, `>=`, `<=`, `contains`, `between`, `in`, `not_in`, `regex`.
+
+```php
+->whereBetween('price', 10, 100)
+->whereIn('status', ['active', 'pending'])
+->whereNotIn('role', ['banned'])
+->whereRegex('email', '^admin@')
+```
+
+### Aggregations
+
+```php
+// Single result
+$db->collection('orders')->sum('total')->avg('total')->get();
+
+// Group by
+$db->collection('orders')
+    ->groupBy('category', [
+        ['function' => 'count', 'alias' => 'total'],
+        ['function' => 'sum', 'field' => 'price', 'alias' => 'revenue'],
+    ])->get();
+```
 
 ## Joins
 
@@ -201,10 +224,10 @@ Filesystem (.anvil compressed + metadata.json)
 
 | Operation | Time | Throughput |
 |---|---:|---|
-| Bulk insert (10x1000) | 199ms | ~50k docs/s |
-| Read all (10k docs) | 23ms | ~441k docs/s |
-| Filter query | 4.3ms | — |
-| Filter + sort + limit | 3.4ms | — |
+| Bulk insert (10x1000) | 204ms | ~49k docs/s |
+| Read all (10k docs) | 22ms | ~454k docs/s |
+| Filter query | 4.6ms | — |
+| Filter + sort + limit | 3.7ms | — |
 | Count with filter | 0.2ms | — |
 
 With compression, encryption, atomic writes, and schema validation active.
@@ -230,7 +253,7 @@ anvildb/
 ## Testing
 
 ```bash
-# Rust tests (41 tests)
+# Rust tests (51 tests)
 cargo test
 
 # PHP tests (22 tests)

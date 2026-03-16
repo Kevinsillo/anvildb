@@ -117,6 +117,30 @@ class Collection
             ->where($field, $operator, $value);
     }
 
+    public function whereBetween(string $field, mixed $min, mixed $max): QueryBuilder
+    {
+        return (new QueryBuilder($this->handle, $this->name))
+            ->whereBetween($field, $min, $max);
+    }
+
+    public function whereIn(string $field, array $values): QueryBuilder
+    {
+        return (new QueryBuilder($this->handle, $this->name))
+            ->whereIn($field, $values);
+    }
+
+    public function whereNotIn(string $field, array $values): QueryBuilder
+    {
+        return (new QueryBuilder($this->handle, $this->name))
+            ->whereNotIn($field, $values);
+    }
+
+    public function whereRegex(string $field, string $pattern): QueryBuilder
+    {
+        return (new QueryBuilder($this->handle, $this->name))
+            ->whereRegex($field, $pattern);
+    }
+
     public function join(
         string $collection,
         string $leftField,
@@ -201,6 +225,100 @@ class Collection
             $errorMsg = is_string($error) ? $error : ($error !== null ? \FFI::string($error) : 'Unknown flush error');
             throw new AnvilDbException("Failed to flush collection: {$errorMsg}");
         }
+    }
+
+    public function exportCsv(string $filePath, ?array $fields = null): int
+    {
+        $docs = $this->all();
+        if (empty($docs)) {
+            return 0;
+        }
+
+        // Use provided fields or infer from first document
+        $fields = $fields ?? array_keys($docs[0]);
+
+        $fp = fopen($filePath, 'w');
+        if ($fp === false) {
+            throw new AnvilDbException("Cannot open file for writing: {$filePath}");
+        }
+
+        // Header
+        fputcsv($fp, $fields);
+
+        // Rows
+        foreach ($docs as $doc) {
+            $row = [];
+            foreach ($fields as $field) {
+                $val = $doc[$field] ?? null;
+                $row[] = is_array($val) || is_object($val) ? json_encode($val) : $val;
+            }
+            fputcsv($fp, $row);
+        }
+
+        fclose($fp);
+        return count($docs);
+    }
+
+    public function importCsv(string $filePath): int
+    {
+        $fp = fopen($filePath, 'r');
+        if ($fp === false) {
+            throw new AnvilDbException("Cannot open file for reading: {$filePath}");
+        }
+
+        // First row is header
+        $headers = fgetcsv($fp);
+        if ($headers === false) {
+            fclose($fp);
+            return 0;
+        }
+
+        $batch = [];
+        $total = 0;
+
+        while (($row = fgetcsv($fp)) !== false) {
+            $doc = [];
+            foreach ($headers as $i => $field) {
+                $val = $row[$i] ?? null;
+                // Try to decode JSON values (arrays, objects)
+                if ($val !== null && $val !== '') {
+                    $decoded = json_decode($val, true);
+                    $doc[$field] = ($decoded !== null && json_last_error() === JSON_ERROR_NONE && (is_array($decoded) || is_object($decoded)))
+                        ? $decoded
+                        : $this->castValue($val);
+                } else {
+                    $doc[$field] = null;
+                }
+            }
+            $batch[] = $doc;
+
+            // Flush in batches of 1000
+            if (count($batch) >= 1000) {
+                $this->bulkInsert($batch);
+                $total += count($batch);
+                $batch = [];
+            }
+        }
+
+        // Flush remaining
+        if (!empty($batch)) {
+            $this->bulkInsert($batch);
+            $total += count($batch);
+        }
+
+        fclose($fp);
+        return $total;
+    }
+
+    private function castValue(string $val): mixed
+    {
+        if ($val === 'true') return true;
+        if ($val === 'false') return false;
+        if ($val === 'null') return null;
+        if (is_numeric($val)) {
+            return str_contains($val, '.') ? (float) $val : (int) $val;
+        }
+        return $val;
     }
 
     public function getName(): string

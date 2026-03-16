@@ -135,9 +135,17 @@ Returns all documents in the collection.
 
 Returns the total number of documents.
 
+### `exportCsv(string $filePath, ?array $fields = null): int`
+
+Exports the collection to a CSV file. Returns the number of exported documents. If `$fields` is null, infers columns from the first document.
+
+### `importCsv(string $filePath): int`
+
+Imports documents from a CSV file (first row = headers). Returns the number of imported documents. Inserts in batches of 1000.
+
 ### `createIndex(string $field, string $type = 'hash'): void`
 
-Creates an index on a field. Types: `hash`, `unique`.
+Creates an index on a field. Types: `hash`, `unique`, `range`.
 
 ### `dropIndex(string $field): void`
 
@@ -181,7 +189,34 @@ Shorthand for `join()` with `$type = 'left'`. Unmatched left rows are included w
 
 ### `where(string $field, string $operator, mixed $value): self`
 
-Adds a filter. Chainable. Operators: `=`, `!=`, `>`, `<`, `>=`, `<=`, `contains`.
+Adds a filter. Chainable. Operators: `=`, `!=`, `>`, `<`, `>=`, `<=`, `contains`, `between`, `in`, `not_in`, `regex`.
+
+### `whereBetween(string $field, mixed $min, mixed $max): self`
+
+Shorthand for `where($field, 'between', [$min, $max])`. Inclusive on both ends.
+
+### `whereIn(string $field, array $values): self`
+
+Matches documents where the field value is in the given array.
+
+### `whereNotIn(string $field, array $values): self`
+
+Matches documents where the field value is NOT in the given array.
+
+### `whereRegex(string $field, string $pattern): self`
+
+Matches documents where the field value matches the regex pattern.
+
+### `sum(string $field, ?string $alias = null): self`
+### `avg(string $field, ?string $alias = null): self`
+### `min(string $field, ?string $alias = null): self`
+### `max(string $field, ?string $alias = null): self`
+
+Adds an aggregation. When any aggregation is present, `get()` returns a single result object with the computed values instead of document rows.
+
+### `groupBy(string|array $fields, array $aggregations = []): self`
+
+Groups results by the given field(s) and applies aggregations per group. Each aggregation is `['function' => '...', 'field' => '...', 'alias' => '...']`.
 
 ### `orderBy(string $field, string $direction = 'asc'): self`
 

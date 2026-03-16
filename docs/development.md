@@ -94,6 +94,7 @@ Multiple joins are applied sequentially (left-to-right).
 
 - **Hash**: `HashMap<String, Vec<usize>>` — equality lookups
 - **Unique**: `HashMap<String, usize>` — equality with uniqueness enforcement
+- **Range**: `BTreeMap<String, Vec<usize>>` — ordered lookups (>, <, >=, <=, between)
 
 Indexes are persisted to `data/indexes/{collection}_{field}.idx.anvil` (compressed, optionally encrypted) and loaded into memory on first access.
 

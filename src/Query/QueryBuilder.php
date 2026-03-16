@@ -13,6 +13,8 @@ class QueryBuilder
     private string $collection;
     private array $filters = [];
     private array $joins = [];
+    private array $aggregations = [];
+    private ?array $groupBy = null;
     private ?array $orderBy = null;
     private ?int $limit = null;
     private ?int $offset = null;
@@ -64,6 +66,80 @@ class QueryBuilder
         return $this->join($collection, $leftField, $rightField, 'left', $prefix);
     }
 
+    public function whereBetween(string $field, mixed $min, mixed $max): self
+    {
+        $this->filters[] = [
+            'field' => $field,
+            'op' => 'between',
+            'value' => [$min, $max],
+        ];
+        return $this;
+    }
+
+    public function whereIn(string $field, array $values): self
+    {
+        $this->filters[] = [
+            'field' => $field,
+            'op' => 'in',
+            'value' => $values,
+        ];
+        return $this;
+    }
+
+    public function whereNotIn(string $field, array $values): self
+    {
+        $this->filters[] = [
+            'field' => $field,
+            'op' => 'not_in',
+            'value' => $values,
+        ];
+        return $this;
+    }
+
+    public function whereRegex(string $field, string $pattern): self
+    {
+        $this->filters[] = [
+            'field' => $field,
+            'op' => 'regex',
+            'value' => $pattern,
+        ];
+        return $this;
+    }
+
+    public function sum(string $field, ?string $alias = null): self
+    {
+        $this->aggregations[] = ['function' => 'sum', 'field' => $field, 'alias' => $alias];
+        return $this;
+    }
+
+    public function avg(string $field, ?string $alias = null): self
+    {
+        $this->aggregations[] = ['function' => 'avg', 'field' => $field, 'alias' => $alias];
+        return $this;
+    }
+
+    public function min(string $field, ?string $alias = null): self
+    {
+        $this->aggregations[] = ['function' => 'min', 'field' => $field, 'alias' => $alias];
+        return $this;
+    }
+
+    public function max(string $field, ?string $alias = null): self
+    {
+        $this->aggregations[] = ['function' => 'max', 'field' => $field, 'alias' => $alias];
+        return $this;
+    }
+
+    public function groupBy(string|array $fields, array $aggregations = []): self
+    {
+        $fields = is_array($fields) ? $fields : [$fields];
+        $this->groupBy = [
+            'fields' => $fields,
+            'aggregations' => $aggregations,
+        ];
+        return $this;
+    }
+
     public function orderBy(string $field, string $direction = 'asc'): self
     {
         $this->orderBy = [
@@ -94,6 +170,12 @@ class QueryBuilder
 
         if (!empty($this->joins)) {
             $spec['joins'] = $this->joins;
+        }
+        if (!empty($this->aggregations)) {
+            $spec['aggregate'] = $this->aggregations;
+        }
+        if ($this->groupBy !== null) {
+            $spec['group_by'] = $this->groupBy;
         }
         if ($this->orderBy !== null) {
             $spec['order_by'] = $this->orderBy;

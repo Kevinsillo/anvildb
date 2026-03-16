@@ -24,6 +24,27 @@ fn default_join_type() -> String {
     "inner".to_string()
 }
 
+/// An aggregation operation.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Aggregation {
+    /// The aggregation function: "sum", "avg", "min", "max", "count".
+    pub function: String,
+    /// The field to aggregate on (not needed for "count").
+    pub field: Option<String>,
+    /// Optional alias for the result key.
+    pub alias: Option<String>,
+}
+
+/// A group_by clause with aggregations.
+#[derive(Debug, Clone, Deserialize)]
+pub struct GroupBy {
+    /// The field(s) to group by.
+    pub fields: Vec<String>,
+    /// Aggregation operations to apply per group.
+    #[serde(default)]
+    pub aggregations: Vec<Aggregation>,
+}
+
 /// A complete query specification deserialized from JSON.
 #[derive(Debug, Clone, Deserialize)]
 pub struct QuerySpec {
@@ -35,6 +56,11 @@ pub struct QuerySpec {
     pub offset: Option<usize>,
     #[serde(default)]
     pub joins: Vec<JoinClause>,
+    /// Aggregations without grouping (returns a single result object).
+    #[serde(default)]
+    pub aggregate: Vec<Aggregation>,
+    /// Group by with aggregations (returns one result per group).
+    pub group_by: Option<GroupBy>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

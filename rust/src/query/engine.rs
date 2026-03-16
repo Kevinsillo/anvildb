@@ -1,19 +1,32 @@
 use std::collections::HashMap;
 
+use regex::Regex;
 use serde_json::Value;
 
 use crate::error::{DbError, DbResult};
-use crate::query::builder::{Filter, JoinClause, OrderBy, QuerySpec};
+use crate::query::builder::{Aggregation, Filter, GroupBy, JoinClause, OrderBy, QuerySpec};
 
 /// Execute a query against a set of documents.
 /// Returns the filtered, sorted, and paginated results.
+/// If aggregations are present, returns aggregation results instead.
 pub fn execute_query(docs: &[Value], spec: &QuerySpec) -> DbResult<Vec<Value>> {
     // Filter
-    let mut results: Vec<Value> = docs
+    let filtered: Vec<Value> = docs
         .iter()
         .filter(|doc| matches_filters(doc, &spec.filters))
         .cloned()
         .collect();
+
+    // Aggregations
+    if let Some(ref group_by) = spec.group_by {
+        return execute_group_by(&filtered, group_by);
+    }
+    if !spec.aggregate.is_empty() {
+        let result = execute_aggregations(&filtered, &spec.aggregate);
+        return Ok(vec![result]);
+    }
+
+    let mut results = filtered;
 
     // Sort
     if let Some(ref order_by) = spec.order_by {
@@ -90,6 +103,33 @@ fn matches_filter(doc: &Value, filter: &Filter) -> bool {
             (Some(Value::Array(arr)), needle) => arr.iter().any(|v| values_equal(v, needle)),
             _ => false,
         },
+        "between" => match (field_val, &filter.value) {
+            (Some(v), Value::Array(range)) if range.len() == 2 => {
+                matches!(
+                    compare_values(v, &range[0]),
+                    Some(std::cmp::Ordering::Greater | std::cmp::Ordering::Equal)
+                ) && matches!(
+                    compare_values(v, &range[1]),
+                    Some(std::cmp::Ordering::Less | std::cmp::Ordering::Equal)
+                )
+            }
+            _ => false,
+        },
+        "in" => match (field_val, &filter.value) {
+            (Some(v), Value::Array(list)) => list.iter().any(|item| values_equal(v, item)),
+            _ => false,
+        },
+        "not_in" => match (field_val, &filter.value) {
+            (Some(v), Value::Array(list)) => !list.iter().any(|item| values_equal(v, item)),
+            (None, Value::Array(_)) => true,
+            _ => false,
+        },
+        "regex" => match (field_val, &filter.value) {
+            (Some(Value::String(s)), Value::String(pattern)) => {
+                Regex::new(pattern).map(|re| re.is_match(s)).unwrap_or(false)
+            }
+            _ => false,
+        },
         _ => false,
     }
 }
@@ -149,6 +189,15 @@ pub fn execute_join_query(
 
     // 3. Apply filters AFTER all joins (filters can reference joined fields)
     results.retain(|doc| matches_filters(doc, &spec.filters));
+
+    // Aggregations
+    if let Some(ref group_by) = spec.group_by {
+        return execute_group_by(&results, group_by);
+    }
+    if !spec.aggregate.is_empty() {
+        let result = execute_aggregations(&results, &spec.aggregate);
+        return Ok(vec![result]);
+    }
 
     // 4. Sort
     if let Some(ref order_by) = spec.order_by {
@@ -235,6 +284,124 @@ fn merge_documents(left: &Value, right: &Value, prefix: &str) -> Value {
         }
     }
     merged
+}
+
+/// Execute aggregations on a set of documents (no grouping).
+/// Returns a single JSON object with the aggregation results.
+fn execute_aggregations(docs: &[Value], aggregations: &[Aggregation]) -> Value {
+    let mut result = serde_json::Map::new();
+
+    for agg in aggregations {
+        let alias = agg
+            .alias
+            .clone()
+            .unwrap_or_else(|| format!("{}_{}", agg.function, agg.field.as_deref().unwrap_or("*")));
+
+        let value = compute_aggregation(docs, &agg.function, agg.field.as_deref());
+        result.insert(alias, value);
+    }
+
+    Value::Object(result)
+}
+
+/// Execute group_by with aggregations.
+/// Returns one JSON object per group.
+fn execute_group_by(docs: &[Value], group_by: &GroupBy) -> DbResult<Vec<Value>> {
+    // Group documents by the group_by fields
+    let mut groups: HashMap<String, Vec<&Value>> = HashMap::new();
+
+    for doc in docs {
+        let key = group_by
+            .fields
+            .iter()
+            .map(|f| {
+                doc.get(f)
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "null".to_string())
+            })
+            .collect::<Vec<_>>()
+            .join("|");
+
+        groups.entry(key).or_default().push(doc);
+    }
+
+    let mut results = Vec::new();
+
+    for (_key, group_docs) in &groups {
+        let mut row = serde_json::Map::new();
+
+        // Add group_by field values from the first doc in the group
+        if let Some(first) = group_docs.first() {
+            for field in &group_by.fields {
+                if let Some(val) = first.get(field) {
+                    row.insert(field.clone(), val.clone());
+                }
+            }
+        }
+
+        // Compute aggregations for this group
+        let owned_docs: Vec<Value> = group_docs.iter().map(|d| (*d).clone()).collect();
+        for agg in &group_by.aggregations {
+            let alias = agg.alias.clone().unwrap_or_else(|| {
+                format!("{}_{}", agg.function, agg.field.as_deref().unwrap_or("*"))
+            });
+            let value = compute_aggregation(&owned_docs, &agg.function, agg.field.as_deref());
+            row.insert(alias, value);
+        }
+
+        results.push(Value::Object(row));
+    }
+
+    Ok(results)
+}
+
+/// Compute a single aggregation function over a set of documents.
+fn compute_aggregation(docs: &[Value], function: &str, field: Option<&str>) -> Value {
+    match function {
+        "count" => Value::Number(serde_json::Number::from(docs.len())),
+        "sum" => {
+            let field = field.unwrap_or("");
+            let sum: f64 = docs
+                .iter()
+                .filter_map(|d| d.get(field)?.as_f64())
+                .sum();
+            serde_json::Number::from_f64(sum)
+                .map(Value::Number)
+                .unwrap_or(Value::Null)
+        }
+        "avg" => {
+            let field = field.unwrap_or("");
+            let values: Vec<f64> = docs
+                .iter()
+                .filter_map(|d| d.get(field)?.as_f64())
+                .collect();
+            if values.is_empty() {
+                Value::Null
+            } else {
+                let avg = values.iter().sum::<f64>() / values.len() as f64;
+                serde_json::Number::from_f64(avg)
+                    .map(Value::Number)
+                    .unwrap_or(Value::Null)
+            }
+        }
+        "min" => {
+            let field = field.unwrap_or("");
+            docs.iter()
+                .filter_map(|d| d.get(field))
+                .min_by(|a, b| compare_values(a, b).unwrap_or(std::cmp::Ordering::Equal))
+                .cloned()
+                .unwrap_or(Value::Null)
+        }
+        "max" => {
+            let field = field.unwrap_or("");
+            docs.iter()
+                .filter_map(|d| d.get(field))
+                .max_by(|a, b| compare_values(a, b).unwrap_or(std::cmp::Ordering::Equal))
+                .cloned()
+                .unwrap_or(Value::Null)
+        }
+        _ => Value::Null,
+    }
 }
 
 /// Sort documents by a field in the specified direction.

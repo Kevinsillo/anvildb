@@ -4,6 +4,7 @@ use serde_json::Value;
 
 use crate::error::{DbError, DbResult};
 use crate::index::hash_index::HashIndex;
+use crate::index::range_index::RangeIndex;
 use crate::index::unique_index::UniqueIndex;
 use crate::validation::schema::Schema;
 
@@ -40,6 +41,7 @@ pub struct Collection {
     pub documents: Vec<Value>,
     pub hash_indexes: HashMap<String, HashIndex>,
     pub unique_indexes: HashMap<String, UniqueIndex>,
+    pub range_indexes: HashMap<String, RangeIndex>,
     pub schema: Option<Schema>,
 }
 
@@ -50,6 +52,7 @@ impl Collection {
             documents: Vec::new(),
             hash_indexes: HashMap::new(),
             unique_indexes: HashMap::new(),
+            range_indexes: HashMap::new(),
             schema: None,
         }
     }
@@ -170,11 +173,19 @@ impl Collection {
         Ok(())
     }
 
-    /// Drop an index on a field (hash or unique).
+    /// Add a range index on a field (BTreeMap for ordered lookups).
+    pub fn add_range_index(&mut self, field: &str) {
+        let mut idx = RangeIndex::new(field);
+        idx.rebuild(&self.documents);
+        self.range_indexes.insert(field.to_string(), idx);
+    }
+
+    /// Drop an index on a field (hash, unique, or range).
     pub fn drop_index(&mut self, field: &str) -> bool {
         let a = self.hash_indexes.remove(field).is_some();
         let b = self.unique_indexes.remove(field).is_some();
-        a || b
+        let c = self.range_indexes.remove(field).is_some();
+        a || b || c
     }
 
     /// Set a schema for this collection.
@@ -189,6 +200,9 @@ impl Collection {
         }
         for (_, idx) in &mut self.unique_indexes {
             idx.rebuild(&self.documents)?;
+        }
+        for (_, idx) in &mut self.range_indexes {
+            idx.rebuild(&self.documents);
         }
         Ok(())
     }
@@ -205,6 +219,12 @@ impl Collection {
             if let Some(val) = doc.get(&idx.field) {
                 let key = crate::index::hash_index::value_to_index_key(val);
                 idx.entries.insert(key, pos);
+            }
+        }
+        for (_, idx) in &mut self.range_indexes {
+            if let Some(val) = doc.get(&idx.field) {
+                let key = crate::index::range_index::value_to_sortable_key_pub(val);
+                idx.entries.entry(key).or_default().push(pos);
             }
         }
     }

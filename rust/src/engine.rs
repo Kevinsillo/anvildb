@@ -10,6 +10,7 @@ use crate::collection::collection::LazyCollection;
 use crate::collection::manager;
 use crate::error::{DbError, DbResult};
 use crate::index::hash_index::HashIndex;
+use crate::index::range_index::RangeIndex;
 use crate::index::unique_index::UniqueIndex;
 use crate::query::builder::{self, QuerySpec};
 use crate::query::engine as qe;
@@ -299,6 +300,9 @@ impl Engine {
                 for (_, idx) in &col.unique_indexes {
                     idx.save(&self.data_path, name, Some(key))?;
                 }
+                for (_, idx) in &col.range_indexes {
+                    idx.save(&self.data_path, name, Some(key))?;
+                }
             }
         }
 
@@ -352,6 +356,9 @@ impl Engine {
                     idx.save(&self.data_path, name, None)?;
                 }
                 for (_, idx) in &col.unique_indexes {
+                    idx.save(&self.data_path, name, None)?;
+                }
+                for (_, idx) in &col.range_indexes {
                     idx.save(&self.data_path, name, None)?;
                 }
             }
@@ -508,9 +515,6 @@ impl Engine {
         let mut new_doc: Value = serde_json::from_str(doc_json)?;
         new_doc["id"] = Value::String(id.to_string());
 
-        self.buffer.remove_collection(collection);
-
-        let key = self.get_key();
         let mut cols = self
             .collections
             .write()
@@ -526,7 +530,7 @@ impl Engine {
             .ok_or_else(|| DbError::DocumentNotFound(id.to_string()))?;
 
         col.update(pos, new_doc)?;
-        file_storage::rewrite_collection(&self.data_path, collection, &col.documents, key.as_ref())?;
+        self.buffer.mark_dirty(collection, 1);
         self.invalidate_cache(collection);
 
         Ok(())
@@ -536,9 +540,6 @@ impl Engine {
     pub fn delete(&self, collection: &str, id: &str) -> DbResult<()> {
         self.ensure_loaded(collection)?;
 
-        self.buffer.remove_collection(collection);
-
-        let key = self.get_key();
         let mut cols = self
             .collections
             .write()
@@ -554,7 +555,7 @@ impl Engine {
             .ok_or_else(|| DbError::DocumentNotFound(id.to_string()))?;
 
         col.delete(pos)?;
-        file_storage::rewrite_collection(&self.data_path, collection, &col.documents, key.as_ref())?;
+        self.buffer.mark_dirty(collection, 1);
         self.invalidate_cache(collection);
 
         Ok(())
@@ -666,6 +667,12 @@ impl Engine {
                     idx.save(&self.data_path, collection, key.as_ref())?;
                 }
             }
+            "range" => {
+                col.add_range_index(field);
+                if let Some(idx) = col.range_indexes.get(field) {
+                    idx.save(&self.data_path, collection, key.as_ref())?;
+                }
+            }
             "hash" | _ => {
                 col.add_hash_index(field);
                 if let Some(idx) = col.hash_indexes.get(field) {
@@ -694,6 +701,7 @@ impl Engine {
         col.drop_index(field);
         HashIndex::delete_file(&self.data_path, collection, field)?;
         UniqueIndex::delete_file(&self.data_path, collection, field)?;
+        RangeIndex::delete_file(&self.data_path, collection, field)?;
 
         Ok(())
     }
