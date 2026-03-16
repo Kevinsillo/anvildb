@@ -23,10 +23,15 @@ cargo test && ./vendor/bin/phpunit
 cargo test
 ```
 
-14 tests covering:
+41 tests covering:
 - Engine lifecycle (open, close, reopen)
 - Collection CRUD (create, drop, insert, find, update, delete)
 - Query engine (all filter operators, sort, limit, offset)
+- Joins (inner, left, multiple, custom prefix, filters/sort/pagination on joined results, error cases)
+- Write buffering (visibility before flush, threshold auto-flush, manual flush, shutdown flush, interaction with update/delete)
+- Lazy loading (list without loading, partial loading, lazy join)
+- Compression (transparent, file format verification)
+- Encryption (encrypted DB, encrypt/decrypt existing, wrong key, key required)
 - Index operations (hash, unique, duplicate rejection)
 - Schema validation (valid/invalid documents)
 - Bulk insert
@@ -59,7 +64,7 @@ Add test functions to `rust/tests/integration_test.rs` or create new test files 
 #[test]
 fn test_my_feature() {
     let dir = tempdir().unwrap();
-    let engine = Engine::new(dir.path().to_str().unwrap()).unwrap();
+    let engine = Engine::open(dir.path().to_str().unwrap(), None).unwrap();
 
     // test logic...
 }

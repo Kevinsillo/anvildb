@@ -3,6 +3,27 @@ use serde_json::Value;
 
 use crate::error::{DbError, DbResult};
 
+/// A join clause describing how to merge two collections.
+#[derive(Debug, Clone, Deserialize)]
+pub struct JoinClause {
+    /// The collection to join against.
+    pub collection: String,
+    /// "inner" or "left".
+    #[serde(default = "default_join_type")]
+    pub join_type: String,
+    /// Field on the primary (left) side, e.g. "user_id".
+    pub left_field: String,
+    /// Field on the joined (right) side, e.g. "id".
+    pub right_field: String,
+    /// Prefix for fields from the joined collection (e.g. "user_").
+    /// Defaults to "{collection}_" if omitted.
+    pub prefix: Option<String>,
+}
+
+fn default_join_type() -> String {
+    "inner".to_string()
+}
+
 /// A complete query specification deserialized from JSON.
 #[derive(Debug, Clone, Deserialize)]
 pub struct QuerySpec {
@@ -12,6 +33,8 @@ pub struct QuerySpec {
     pub order_by: Option<OrderBy>,
     pub limit: Option<usize>,
     pub offset: Option<usize>,
+    #[serde(default)]
+    pub joins: Vec<JoinClause>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

@@ -3,7 +3,7 @@
 typedef void* AnvilDbHandle;
 
 // Lifecycle
-AnvilDbHandle anvildb_open(const char* data_path);
+AnvilDbHandle anvildb_open(const char* data_path, const char* encryption_key);
 void anvildb_close(AnvilDbHandle handle);
 void anvildb_shutdown(AnvilDbHandle handle);
 
@@ -30,11 +30,21 @@ int32_t anvildb_drop_index(AnvilDbHandle handle, const char* collection, const c
 // Schema
 int32_t anvildb_set_schema(AnvilDbHandle handle, const char* collection, const char* json_schema);
 
+// Buffer control
+int32_t anvildb_flush(AnvilDbHandle handle);
+int32_t anvildb_flush_collection(AnvilDbHandle handle, const char* collection);
+int32_t anvildb_configure_buffer(AnvilDbHandle handle, int32_t max_docs, int32_t flush_interval_secs);
+
+// Encryption
+int32_t anvildb_encrypt(AnvilDbHandle handle, const char* encryption_key);
+int32_t anvildb_decrypt(AnvilDbHandle handle, const char* encryption_key);
+
 // Cache
 void anvildb_clear_cache(AnvilDbHandle handle);
 
-// Errors
+// Errors + Warnings
 const char* anvildb_last_error(AnvilDbHandle handle);
+const char* anvildb_last_warning(AnvilDbHandle handle);
 
 // Memory management
 void anvildb_free_string(const char* ptr);

@@ -1,7 +1,7 @@
 <?php
 
 /**
- * AnvilDB Benchmark — compares AnvilDB (Rust FFI) vs pure PHP json_encode/json_decode.
+ * AnvilDB Benchmark — measures AnvilDB performance.
  *
  * Usage:
  *   php benchmarks/benchmark.php [records]
@@ -37,7 +37,7 @@ for ($i = 0; $i < $records; $i++) {
     ];
 }
 
-// ─── AnvilDB Benchmark ───────────────────────────────────
+// ─── Benchmark ───────────────────────────────────────────
 $anvilPath = $tmpBase . '/anvildb';
 mkdir($anvilPath, 0777, true);
 
@@ -45,102 +45,59 @@ $db = new AnvilDb($anvilPath);
 $db->createCollection('bench');
 $collection = $db->collection('bench');
 
-// Insert
-$start = hrtime(true);
+// Bulk insert
 $batchSize = 1000;
+$start = hrtime(true);
 for ($i = 0; $i < $records; $i += $batchSize) {
     $batch = array_slice($testData, $i, $batchSize);
     $collection->bulkInsert($batch);
 }
-$anvilInsertMs = (hrtime(true) - $start) / 1_000_000;
+$db->flush();
+$insertMs = (hrtime(true) - $start) / 1_000_000;
+$insertThroughput = round($records / ($insertMs / 1000));
 
-// Query: filter
+// Read all
+$start = hrtime(true);
+$all = $collection->all();
+$readAllMs = (hrtime(true) - $start) / 1_000_000;
+$readThroughput = round(count($all) / ($readAllMs / 1000));
+
+// Filter query
 $start = hrtime(true);
 $admins = $collection->where('role', '=', 'admin')->get();
-$anvilQueryMs = (hrtime(true) - $start) / 1_000_000;
+$filterMs = (hrtime(true) - $start) / 1_000_000;
 
-// Query: filter + sort + limit
+// Filter + sort + limit
 $start = hrtime(true);
 $complex = $collection
     ->where('age', '>', 50)
     ->orderBy('name', 'asc')
     ->limit(100)
     ->get();
-$anvilComplexMs = (hrtime(true) - $start) / 1_000_000;
+$complexMs = (hrtime(true) - $start) / 1_000_000;
 
 // Count with filter
 $start = hrtime(true);
 $activeCount = $collection->where('active', '=', true)->count();
-$anvilCountMs = (hrtime(true) - $start) / 1_000_000;
-
-// Read all
-$start = hrtime(true);
-$all = $collection->all();
-$anvilReadAllMs = (hrtime(true) - $start) / 1_000_000;
+$countMs = (hrtime(true) - $start) / 1_000_000;
 
 $db->close();
 Bridge::reset();
 
-// ─── Pure PHP Benchmark ──────────────────────────────────
-$phpPath = $tmpBase . '/purephp';
-mkdir($phpPath, 0777, true);
-$phpFile = $phpPath . '/bench.json';
-
-// Insert (write all at once — best case for PHP)
-$start = hrtime(true);
-$phpDocs = [];
-foreach ($testData as $i => $doc) {
-    $doc['id'] = sprintf('%08d', $i);
-    $phpDocs[] = $doc;
-}
-file_put_contents($phpFile, json_encode($phpDocs, JSON_THROW_ON_ERROR));
-$phpInsertMs = (hrtime(true) - $start) / 1_000_000;
-
-// Read all + decode
-$start = hrtime(true);
-$phpAll = json_decode(file_get_contents($phpFile), true, 512, JSON_THROW_ON_ERROR);
-$phpReadAllMs = (hrtime(true) - $start) / 1_000_000;
-
-// Query: filter (manual array_filter)
-$start = hrtime(true);
-$phpAdmins = array_values(array_filter($phpAll, fn($d) => $d['role'] === 'admin'));
-$phpQueryMs = (hrtime(true) - $start) / 1_000_000;
-
-// Query: filter + sort + limit (manual)
-$start = hrtime(true);
-$phpComplex = array_values(array_filter($phpAll, fn($d) => $d['age'] > 50));
-usort($phpComplex, fn($a, $b) => strcmp($a['name'], $b['name']));
-$phpComplex = array_slice($phpComplex, 0, 100);
-$phpComplexMs = (hrtime(true) - $start) / 1_000_000;
-
-// Count with filter
-$start = hrtime(true);
-$phpActiveCount = count(array_filter($phpAll, fn($d) => $d['active'] === true));
-$phpCountMs = (hrtime(true) - $start) / 1_000_000;
-
 // ─── Results ─────────────────────────────────────────────
-$fmt = "  %-22s %10.1f ms  %10.1f ms  %7s\n";
+echo "  Operation                    Time        Throughput\n";
+echo "  ───────────────────────────  ──────────  ──────────\n";
 
-echo "  Operation              AnvilDB (ms)  Pure PHP (ms)  Winner\n";
-echo "  ─────────────────────  ────────────  ─────────────  ──────\n";
+$fmt = "  %-29s %7.1f ms  %s\n";
 
-$ops = [
-    ['Bulk insert',          $anvilInsertMs,  $phpInsertMs],
-    ['Read all',             $anvilReadAllMs, $phpReadAllMs],
-    ['Filter (= admin)',     $anvilQueryMs,   $phpQueryMs],
-    ['Filter + sort + limit',$anvilComplexMs, $phpComplexMs],
-    ['Count with filter',    $anvilCountMs,   $phpCountMs],
-];
+printf($fmt, "Bulk insert ({$batchSize}/batch)", $insertMs, "~{$insertThroughput} docs/s");
+printf($fmt, "Read all ({$records} docs)", $readAllMs, "~{$readThroughput} docs/s");
+printf($fmt, "Filter (role = admin)", $filterMs, count($admins) . " results");
+printf($fmt, "Filter + sort + limit(100)", $complexMs, count($complex) . " results");
+printf($fmt, "Count with filter", $countMs, "{$activeCount} matching");
 
-foreach ($ops as [$name, $anvil, $php]) {
-    $winner = $anvil < $php ? 'AnvilDB' : 'PHP';
-    $ratio = $anvil < $php
-        ? sprintf('%.1fx', $php / $anvil)
-        : sprintf('%.1fx', $anvil / $php);
-    printf($fmt, $name, $anvil, $php, $winner);
-}
-
-echo "\n  Records: $records | AnvilDB admins: " . count($admins) . " | PHP admins: " . count($phpAdmins) . "\n";
+echo "\n  All operations include: compression, atomic writes,\n";
+echo "  schema validation, and index enforcement.\n";
 
 // ─── Cleanup ─────────────────────────────────────────────
 function rmrf(string $dir): void

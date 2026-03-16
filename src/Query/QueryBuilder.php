@@ -12,6 +12,7 @@ class QueryBuilder
     private \FFI\CData $handle;
     private string $collection;
     private array $filters = [];
+    private array $joins = [];
     private ?array $orderBy = null;
     private ?int $limit = null;
     private ?int $offset = null;
@@ -30,6 +31,37 @@ class QueryBuilder
             'value' => $value,
         ];
         return $this;
+    }
+
+    public function join(
+        string $collection,
+        string $leftField,
+        string $rightField,
+        string $type = 'inner',
+        ?string $prefix = null,
+    ): self {
+        $join = [
+            'collection' => $collection,
+            'join_type' => $type,
+            'left_field' => $leftField,
+            'right_field' => $rightField,
+        ];
+
+        if ($prefix !== null) {
+            $join['prefix'] = $prefix;
+        }
+
+        $this->joins[] = $join;
+        return $this;
+    }
+
+    public function leftJoin(
+        string $collection,
+        string $leftField,
+        string $rightField,
+        ?string $prefix = null,
+    ): self {
+        return $this->join($collection, $leftField, $rightField, 'left', $prefix);
     }
 
     public function orderBy(string $field, string $direction = 'asc'): self
@@ -60,6 +92,9 @@ class QueryBuilder
             'filters' => $this->filters,
         ];
 
+        if (!empty($this->joins)) {
+            $spec['joins'] = $this->joins;
+        }
         if ($this->orderBy !== null) {
             $spec['order_by'] = $this->orderBy;
         }

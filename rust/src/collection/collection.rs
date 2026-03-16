@@ -7,6 +7,32 @@ use crate::index::hash_index::HashIndex;
 use crate::index::unique_index::UniqueIndex;
 use crate::validation::schema::Schema;
 
+/// Wrapper that allows collections to be lazily loaded from disk.
+pub enum LazyCollection {
+    /// Collection exists on disk but has not been loaded yet.
+    Unloaded,
+    /// Collection is fully loaded in memory.
+    Loaded(Collection),
+}
+
+impl LazyCollection {
+    /// Get a reference to the loaded collection, or `None` if unloaded.
+    pub fn as_loaded(&self) -> Option<&Collection> {
+        match self {
+            LazyCollection::Loaded(col) => Some(col),
+            LazyCollection::Unloaded => None,
+        }
+    }
+
+    /// Get a mutable reference to the loaded collection, or `None` if unloaded.
+    pub fn as_loaded_mut(&mut self) -> Option<&mut Collection> {
+        match self {
+            LazyCollection::Loaded(col) => Some(col),
+            LazyCollection::Unloaded => None,
+        }
+    }
+}
+
 /// Represents an in-memory collection of JSON documents.
 #[derive(Debug)]
 pub struct Collection {

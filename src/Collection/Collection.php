@@ -117,6 +117,27 @@ class Collection
             ->where($field, $operator, $value);
     }
 
+    public function join(
+        string $collection,
+        string $leftField,
+        string $rightField,
+        string $type = 'inner',
+        ?string $prefix = null,
+    ): QueryBuilder {
+        return (new QueryBuilder($this->handle, $this->name))
+            ->join($collection, $leftField, $rightField, $type, $prefix);
+    }
+
+    public function leftJoin(
+        string $collection,
+        string $leftField,
+        string $rightField,
+        ?string $prefix = null,
+    ): QueryBuilder {
+        return (new QueryBuilder($this->handle, $this->name))
+            ->leftJoin($collection, $leftField, $rightField, $prefix);
+    }
+
     public function orderBy(string $field, string $direction = 'asc'): QueryBuilder
     {
         return (new QueryBuilder($this->handle, $this->name))
@@ -167,6 +188,18 @@ class Collection
             $error = $ffi->anvildb_last_error($this->handle);
             $errorMsg = is_string($error) ? $error : ($error !== null ? \FFI::string($error) : 'Unknown schema error');
             throw new AnvilDbException($errorMsg);
+        }
+    }
+
+    public function flush(): void
+    {
+        $ffi = Bridge::get();
+        $result = $ffi->anvildb_flush_collection($this->handle, $this->name);
+
+        if ($result < 0) {
+            $error = $ffi->anvildb_last_error($this->handle);
+            $errorMsg = is_string($error) ? $error : ($error !== null ? \FFI::string($error) : 'Unknown flush error');
+            throw new AnvilDbException("Failed to flush collection: {$errorMsg}");
         }
     }
 

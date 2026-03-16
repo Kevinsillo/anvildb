@@ -1,13 +1,17 @@
-# AnvilDB
+<p align="center">
+  <img src="docs/logotipo.png" alt="AnvilDB" width="300">
+</p>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![PHP Version](https://img.shields.io/badge/PHP-%3E%3D%208.1-8892BF.svg)](https://www.php.net/)
-[![Rust](https://img.shields.io/badge/Rust-stable-orange.svg)](https://www.rust-lang.org/)
-[![Tests](https://github.com/Kevinsillo/anvildb/actions/workflows/tests.yml/badge.svg)](https://github.com/Kevinsillo/anvildb/actions/workflows/tests.yml)
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://www.php.net/"><img src="https://img.shields.io/badge/PHP-%3E%3D%208.1-8892BF.svg" alt="PHP Version"></a>
+  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-stable-orange.svg" alt="Rust"></a>
+  <a href="https://github.com/Kevinsillo/anvildb/actions/workflows/tests.yml"><img src="https://github.com/Kevinsillo/anvildb/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
+</p>
 
-**Embedded JSON document database for PHP, powered by a Rust core via FFI.**
+<p align="center"><strong>Embedded JSON document database for PHP, powered by a Rust core via FFI.</strong></p>
 
-Zero external dependencies. No MySQL, PostgreSQL, SQLite, or PDO required. Just your filesystem and raw speed.
+<p align="center">Zero external dependencies. No MySQL, PostgreSQL, SQLite, or PDO required. Just your filesystem and raw speed.</p>
 
 ---
 
@@ -26,13 +30,25 @@ Zero external dependencies. No MySQL, PostgreSQL, SQLite, or PDO required. Just 
 ## Features
 
 - **Rust-powered core** compiled as a native shared library (`.so` / `.dylib` / `.dll`)
-- **Fluent PHP API** with query builder, filters, sorting, and pagination
+- **Joins** — INNER and LEFT joins across collections via hash join (O(n+m))
+- **Write buffering** — batched disk writes with configurable threshold and timer
+- **Compression** — all data compressed on disk (deflate), transparent to the API
+- **Encryption at rest** — optional AES-256-GCM, per-file nonce, key as hex string
+- **Lazy loading** — collections loaded on first access, not at startup
 - **In-memory indexes** (hash and unique) for sub-millisecond lookups
 - **LRU cache** with automatic invalidation on writes
 - **Atomic writes** via temp file + rename to prevent corruption
 - **Schema validation** to enforce document structure
 - **Bulk operations** for efficient batch inserts
 - **Cross-platform** precompiled binaries (Linux, macOS, Windows / x86_64, aarch64)
+
+## Wrappers
+
+| Language | Status | Package |
+|----------|--------|---------|
+| PHP | Included | Fluent API, query builder, filters, sorting, pagination |
+
+More wrappers coming soon. The core exposes a C API (`anvildb.h`) — any language with FFI support can integrate.
 
 ## Requirements
 
@@ -60,7 +76,11 @@ The shared library will be at `target/release/libanvildb.so`. The PHP wrapper au
 
 use AnvilDb\AnvilDb;
 
+// Open database (data is compressed on disk automatically)
 $db = new AnvilDb(__DIR__ . '/data');
+
+// Or with encryption (64-char hex key = 32 bytes AES-256)
+// $db = new AnvilDb(__DIR__ . '/data', 'your-64-char-hex-key-here...');
 
 // Create a collection
 $db->createCollection('users');
@@ -92,8 +112,6 @@ $db->close();
 
 ## Queries
 
-Fluent query builder with filters, sorting, and pagination — executed as a **single FFI call**:
-
 ```php
 $results = $db->collection('users')
     ->where('role', '=', 'admin')
@@ -104,63 +122,57 @@ $results = $db->collection('users')
     ->get();
 ```
 
-Supported operators: `=`, `!=`, `>`, `<`, `>=`, `<=`, `contains`.
+Operators: `=`, `!=`, `>`, `<`, `>=`, `<=`, `contains`.
+
+## Joins
 
 ```php
-// Count with filters
-$count = $db->collection('users')
-    ->where('role', '=', 'admin')
-    ->count();
+// INNER JOIN
+$results = $db->collection('orders')
+    ->join('users', 'user_id', 'id', 'inner', 'user_')
+    ->where('user_name', '=', 'Alice')
+    ->orderBy('total', 'desc')
+    ->get();
 
-// Get all documents
-$all = $db->collection('users')->all();
+// LEFT JOIN
+$results = $db->collection('users')
+    ->leftJoin('orders', 'id', 'user_id', 'order_')
+    ->get();
 
-// Bulk insert
-$docs = $db->collection('users')->bulkInsert([
-    ['name' => 'Alice', 'role' => 'user'],
-    ['name' => 'Bob',   'role' => 'admin'],
-]);
+// Multiple joins
+$results = $db->collection('order_items')
+    ->join('orders', 'order_id', 'id', 'inner', 'order_')
+    ->join('products', 'product_id', 'id', 'inner', 'product_')
+    ->get();
 ```
 
-## Indexes
+Joined fields are prefixed to avoid collisions (e.g. `user_name`, `order_total`). Filters, sorting, and pagination apply after the join.
 
-Create indexes for faster queries:
+## Write Buffering
+
+Inserts are buffered in memory and flushed to disk by threshold (default: 100 docs) or timer (default: 5s).
 
 ```php
-// Hash index — fast equality lookups
-$db->collection('users')->createIndex('role', 'hash');
-
-// Unique index — enforces uniqueness
-$db->collection('users')->createIndex('email', 'unique');
-
-// Drop index
-$db->collection('users')->dropIndex('role');
+$db->configureBuffer(maxDocs: 200, flushIntervalSecs: 10);
+$db->flush();                        // manual flush (all collections)
+$db->collection('logs')->flush();    // flush single collection
+$db->shutdown();                     // flushes + closes
 ```
 
-## Schema Validation
-
-Define schemas to enforce document structure at insert/update time:
+## Encryption
 
 ```php
-$db->collection('users')->setSchema([
-    'name'   => 'string',
-    'age'    => 'int',
-    'active' => 'bool',
-]);
+// Create a new encrypted database (or open an existing one)
+$db = new AnvilDb('/data', 'aabbccdd...64-char-hex-key...');
 
-// This will throw AnvilDbException — name must be string
-$db->collection('users')->insert(['name' => 123]);
+// Add encryption to an existing unencrypted database
+$db->encrypt('aabbccdd...64-char-hex-key...');
+
+// Remove encryption from an encrypted database
+$db->decrypt('aabbccdd...64-char-hex-key...');
 ```
 
-Supported types: `string`, `int`, `float`, `bool`, `array`, `object`.
-
-## Collections Management
-
-```php
-$db->createCollection('orders');
-$db->dropCollection('orders');
-$collections = $db->listCollections(); // ['orders', 'users']
-```
+See [API Reference](docs/api-reference.md) for the full API (indexes, schemas, collections, etc.).
 
 ## Architecture
 
@@ -172,23 +184,32 @@ PHP FFI Wrapper (fluent API)
     | JSON strings + opaque handle
     v
 Rust Core Engine (libanvildb.so)
+    |  - Write Buffer (dirty tracking + batched flush)
     |  - LRU Cache (auto-invalidated)
     |  - In-memory Indexes (Hash / Unique)
-    |  - Query Engine (filter, sort, paginate)
+    |  - Query Engine (filter, join, sort, paginate)
     |  - Schema Validation
+    |  - Codec (deflate compression + optional AES-256-GCM)
     |  - Atomic Storage (temp file + rename)
     v
-Filesystem (JSON collections + index files)
+Filesystem (.anvil compressed + metadata.json)
 ```
 
-The Rust core handles all heavy operations:
+## Performance
 
-- **Storage**: Atomic writes (temp file + rename), file locking via `flock`
-- **Indexes**: In-memory `HashMap`/`BTreeMap`, persisted to disk
-- **Cache**: LRU cache in Rust heap, auto-invalidated on writes
-- **Queries**: Filter, sort, limit, offset — single FFI call per query
-- **Validation**: Schema enforcement before insert/update
-- **Serialization**: `serde_json` (orders of magnitude faster than PHP's `json_encode`/`json_decode`)
+10,000 records | PHP 8.4 | Linux x86_64
+
+| Operation | Time | Throughput |
+|---|---:|---|
+| Bulk insert (10x1000) | 199ms | ~50k docs/s |
+| Read all (10k docs) | 23ms | ~441k docs/s |
+| Filter query | 4.3ms | — |
+| Filter + sort + limit | 3.4ms | — |
+| Count with filter | 0.2ms | — |
+
+With compression, encryption, atomic writes, and schema validation active.
+
+Full benchmark history: [BENCHMARKS.md](BENCHMARKS.md)
 
 ## Project Structure
 
@@ -209,7 +230,7 @@ anvildb/
 ## Testing
 
 ```bash
-# Rust tests (14 tests)
+# Rust tests (41 tests)
 cargo test
 
 # PHP tests (22 tests)

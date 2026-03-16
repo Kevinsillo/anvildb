@@ -13,6 +13,9 @@ pub enum DbError {
     InvalidQuery(String),
     InvalidArgument(String),
     LockError(String),
+    EncryptionRequired,
+    EncryptionError(String),
+    DecryptionFailed(String),
 }
 
 impl fmt::Display for DbError {
@@ -43,6 +46,15 @@ impl fmt::Display for DbError {
             }
             DbError::LockError(msg) => {
                 write!(f, "Lock error: {}", msg)
+            }
+            DbError::EncryptionRequired => {
+                write!(f, "Database is encrypted — encryption key required")
+            }
+            DbError::EncryptionError(msg) => {
+                write!(f, "Encryption error: {}", msg)
+            }
+            DbError::DecryptionFailed(msg) => {
+                write!(f, "Decryption failed: {}", msg)
             }
         }
     }

@@ -6,12 +6,13 @@
 use AnvilDb\AnvilDb;
 ```
 
-### `__construct(string $dataPath)`
+### `__construct(string $dataPath, ?string $encryptionKey = null)`
 
-Opens the database engine. Creates the data directory if it doesn't exist.
+Opens the database engine. Creates the data directory if it doesn't exist. Pass a 64-character hex string to open an encrypted database.
 
 ```php
 $db = new AnvilDb('/path/to/data');
+$db = new AnvilDb('/path/to/data', 'aabbccdd...64chars...');
 ```
 
 ### `close(): void`
@@ -20,7 +21,19 @@ Closes the engine and frees resources. Called automatically on destruction.
 
 ### `shutdown(): void`
 
-Flushes all pending write buffers. Call before `close()` in long-running processes.
+Flushes all pending write buffers and closes the engine. The handle is no longer usable after this call.
+
+### `flush(): void`
+
+Flushes all pending buffered writes to disk across all collections.
+
+### `configureBuffer(int $maxDocs = 100, int $flushIntervalSecs = 5): void`
+
+Configures the write buffer. `$maxDocs` is the per-collection threshold that triggers an auto-flush. `$flushIntervalSecs` is the background timer interval.
+
+```php
+$db->configureBuffer(200, 10); // flush every 200 docs or 10 seconds
+```
 
 ### `collection(string $name): Collection`
 
@@ -37,6 +50,14 @@ Drops a collection and deletes its data file.
 ### `listCollections(): array`
 
 Returns an array of collection names.
+
+### `encrypt(string $key): void`
+
+Encrypts an unencrypted database. Rewrites all collection and index files with AES-256-GCM. `$key` is a 64-character hex string (32 bytes).
+
+### `decrypt(string $key): void`
+
+Decrypts an encrypted database. Rewrites all files without encryption.
 
 ### `clearCache(): void`
 
@@ -82,6 +103,22 @@ Replaces the document with the given data (preserving the ID). Returns `true` on
 
 Deletes a document by ID. Returns `true` on success.
 
+### `flush(): void`
+
+Flushes pending buffered writes for this collection to disk.
+
+### `join(string $collection, string $leftField, string $rightField, string $type = 'inner', ?string $prefix = null): QueryBuilder`
+
+Starts a query chain with a join. Joined fields are prefixed (defaults to `{collection}_`).
+
+```php
+$collection->join('users', 'user_id', 'id', 'inner', 'user_')->get();
+```
+
+### `leftJoin(string $collection, string $leftField, string $rightField, ?string $prefix = null): QueryBuilder`
+
+Shorthand for `join()` with `$type = 'left'`.
+
 ### `where(string $field, string $operator, mixed $value): QueryBuilder`
 
 Starts a query chain with a filter condition.
@@ -124,6 +161,23 @@ $collection->setSchema([
 ```php
 use AnvilDb\Query\QueryBuilder;
 ```
+
+### `join(string $collection, string $leftField, string $rightField, string $type = 'inner', ?string $prefix = null): self`
+
+Adds a join clause. Multiple joins can be chained. `$type` is `inner` or `left`. `$prefix` defaults to `{collection}_`.
+
+```php
+$qb->join('users', 'user_id', 'id', 'inner', 'u_')
+    ->join('products', 'product_id', 'id', 'inner', 'p_')
+    ->where('u_status', '=', 'active')
+    ->get();
+```
+
+Filters, sorting, and pagination apply **after** all joins, so you can reference prefixed fields.
+
+### `leftJoin(string $collection, string $leftField, string $rightField, ?string $prefix = null): self`
+
+Shorthand for `join()` with `$type = 'left'`. Unmatched left rows are included without right-side fields.
 
 ### `where(string $field, string $operator, mixed $value): self`
 
