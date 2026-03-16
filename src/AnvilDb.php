@@ -9,11 +9,22 @@ use AnvilDb\Exception\FFIException;
 use AnvilDb\Exception\AnvilDbException;
 use AnvilDb\FFI\Bridge;
 
+/**
+ * Main entry point for the AnvilDB embedded document database.
+ */
 class AnvilDb
 {
     private \FFI\CData $handle;
     private bool $closed = false;
 
+    /**
+     * Open an AnvilDB database at the given path.
+     *
+     * @param string      $dataPath      Filesystem path to the database directory
+     * @param string|null $encryptionKey Optional encryption key for at-rest encryption
+     *
+     * @throws FFIException If the engine fails to open
+     */
     public function __construct(string $dataPath, ?string $encryptionKey = null)
     {
         $ffi = Bridge::get();
@@ -34,11 +45,19 @@ class AnvilDb
         }
     }
 
+    /**
+     * Destructor that ensures the database handle is closed.
+     */
     public function __destruct()
     {
         $this->close();
     }
 
+    /**
+     * Close the database handle and release resources.
+     *
+     * @return void
+     */
     public function close(): void
     {
         if (!$this->closed) {
@@ -48,6 +67,11 @@ class AnvilDb
         }
     }
 
+    /**
+     * Gracefully shut down the database engine.
+     *
+     * @return void
+     */
     public function shutdown(): void
     {
         if (!$this->closed) {
@@ -57,6 +81,13 @@ class AnvilDb
         }
     }
 
+    /**
+     * Flush all pending buffered writes to disk.
+     *
+     * @return void
+     *
+     * @throws AnvilDbException If the flush operation fails
+     */
     public function flush(): void
     {
         $this->ensureOpen();
@@ -70,6 +101,16 @@ class AnvilDb
         }
     }
 
+    /**
+     * Configure the write buffer size and auto-flush interval.
+     *
+     * @param int $maxDocs           Maximum number of documents to buffer before flushing
+     * @param int $flushIntervalSecs Automatic flush interval in seconds
+     *
+     * @return void
+     *
+     * @throws AnvilDbException If the configuration fails
+     */
     public function configureBuffer(int $maxDocs = 100, int $flushIntervalSecs = 5): void
     {
         $this->ensureOpen();
@@ -83,12 +124,30 @@ class AnvilDb
         }
     }
 
+    /**
+     * Get a collection handle for querying and manipulating documents.
+     *
+     * @param string $name Collection name
+     *
+     * @return Collection
+     *
+     * @throws AnvilDbException If the database is closed
+     */
     public function collection(string $name): Collection
     {
         $this->ensureOpen();
         return new Collection($this->handle, $name);
     }
 
+    /**
+     * Create a new collection.
+     *
+     * @param string $name Collection name
+     *
+     * @return void
+     *
+     * @throws AnvilDbException If creation fails
+     */
     public function createCollection(string $name): void
     {
         $this->ensureOpen();
@@ -102,6 +161,15 @@ class AnvilDb
         }
     }
 
+    /**
+     * Drop an existing collection and all its documents.
+     *
+     * @param string $name Collection name
+     *
+     * @return void
+     *
+     * @throws AnvilDbException If the drop operation fails
+     */
     public function dropCollection(string $name): void
     {
         $this->ensureOpen();
@@ -115,6 +183,14 @@ class AnvilDb
         }
     }
 
+    /**
+     * List all collection names in the database.
+     *
+     * @return array<string> Array of collection names
+     *
+     * @throws AnvilDbException       If the database is closed
+     * @throws \JsonException         If the engine returns invalid JSON
+     */
     public function listCollections(): array
     {
         $this->ensureOpen();
@@ -135,6 +211,15 @@ class AnvilDb
         return json_decode($resultJson, true, 512, JSON_THROW_ON_ERROR);
     }
 
+    /**
+     * Enable at-rest encryption with the given key.
+     *
+     * @param string $key Encryption key
+     *
+     * @return void
+     *
+     * @throws AnvilDbException If encryption fails
+     */
     public function encrypt(string $key): void
     {
         $this->ensureOpen();
@@ -148,6 +233,15 @@ class AnvilDb
         }
     }
 
+    /**
+     * Decrypt the database using the given key.
+     *
+     * @param string $key Encryption key
+     *
+     * @return void
+     *
+     * @throws AnvilDbException If decryption fails
+     */
     public function decrypt(string $key): void
     {
         $this->ensureOpen();
@@ -161,6 +255,13 @@ class AnvilDb
         }
     }
 
+    /**
+     * Clear the in-memory query cache.
+     *
+     * @return void
+     *
+     * @throws AnvilDbException If the database is closed
+     */
     public function clearCache(): void
     {
         $this->ensureOpen();

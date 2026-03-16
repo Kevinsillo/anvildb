@@ -6,10 +6,20 @@ namespace AnvilDb\FFI;
 
 use AnvilDb\Exception\FFIException;
 
+/**
+ * FFI bridge that loads and provides access to the native AnvilDB shared library.
+ */
 class Bridge
 {
     private static ?\FFI $ffi = null;
 
+    /**
+     * Get the singleton FFI instance, initializing it on first call.
+     *
+     * @return \FFI The FFI handle bound to the AnvilDB shared library
+     *
+     * @throws FFIException If the FFI extension is missing, the header is unreadable, or the library is not found
+     */
     public static function get(): \FFI
     {
         if (self::$ffi === null) {
@@ -33,6 +43,11 @@ class Bridge
         return self::$ffi;
     }
 
+    /**
+     * Reset the cached FFI instance (useful for testing).
+     *
+     * @return void
+     */
     public static function reset(): void
     {
         self::$ffi = null;

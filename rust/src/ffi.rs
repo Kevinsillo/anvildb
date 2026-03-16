@@ -110,7 +110,7 @@ pub unsafe extern "C" fn anvildb_create_collection(
     match eng.create_collection(name) {
         Ok(()) => 0,
         Err(e) => {
-            eng.set_error(e.to_string());
+            eng.set_error_from(&e);
             -1
         }
     }
@@ -136,7 +136,7 @@ pub unsafe extern "C" fn anvildb_drop_collection(
     match eng.drop_collection(name) {
         Ok(()) => 0,
         Err(e) => {
-            eng.set_error(e.to_string());
+            eng.set_error_from(&e);
             -1
         }
     }
@@ -157,7 +157,7 @@ pub unsafe extern "C" fn anvildb_list_collections(
             string_to_c(json)
         }
         Err(e) => {
-            eng.set_error(e.to_string());
+            eng.set_error_from(&e);
             std::ptr::null()
         }
     }
@@ -198,7 +198,7 @@ pub unsafe extern "C" fn anvildb_insert(
             string_to_c(json)
         }
         Err(e) => {
-            eng.set_error(e.to_string());
+            eng.set_error_from(&e);
             std::ptr::null()
         }
     }
@@ -235,7 +235,7 @@ pub unsafe extern "C" fn anvildb_find_by_id(
             string_to_c(json)
         }
         Err(e) => {
-            eng.set_error(e.to_string());
+            eng.set_error_from(&e);
             std::ptr::null()
         }
     }
@@ -277,7 +277,7 @@ pub unsafe extern "C" fn anvildb_update(
     match eng.update(collection, id, json_doc) {
         Ok(()) => 0,
         Err(e) => {
-            eng.set_error(e.to_string());
+            eng.set_error_from(&e);
             -1
         }
     }
@@ -311,7 +311,7 @@ pub unsafe extern "C" fn anvildb_delete(
     match eng.delete(collection, id) {
         Ok(()) => 0,
         Err(e) => {
-            eng.set_error(e.to_string());
+            eng.set_error_from(&e);
             -1
         }
     }
@@ -348,7 +348,7 @@ pub unsafe extern "C" fn anvildb_bulk_insert(
             string_to_c(json)
         }
         Err(e) => {
-            eng.set_error(e.to_string());
+            eng.set_error_from(&e);
             std::ptr::null()
         }
     }
@@ -381,7 +381,7 @@ pub unsafe extern "C" fn anvildb_query(
             string_to_c(json)
         }
         Err(e) => {
-            eng.set_error(e.to_string());
+            eng.set_error_from(&e);
             std::ptr::null()
         }
     }
@@ -409,7 +409,7 @@ pub unsafe extern "C" fn anvildb_count(
     match eng.count(collection, filter) {
         Ok(n) => n,
         Err(e) => {
-            eng.set_error(e.to_string());
+            eng.set_error_from(&e);
             -1
         }
     }
@@ -449,7 +449,7 @@ pub unsafe extern "C" fn anvildb_create_index(
     match eng.create_index(collection, field, idx_type) {
         Ok(()) => 0,
         Err(e) => {
-            eng.set_error(e.to_string());
+            eng.set_error_from(&e);
             -1
         }
     }
@@ -483,7 +483,7 @@ pub unsafe extern "C" fn anvildb_drop_index(
     match eng.drop_index(collection, field) {
         Ok(()) => 0,
         Err(e) => {
-            eng.set_error(e.to_string());
+            eng.set_error_from(&e);
             -1
         }
     }
@@ -521,7 +521,7 @@ pub unsafe extern "C" fn anvildb_set_schema(
     match eng.set_schema(collection, schema) {
         Ok(()) => 0,
         Err(e) => {
-            eng.set_error(e.to_string());
+            eng.set_error_from(&e);
             -1
         }
     }
@@ -552,7 +552,7 @@ pub unsafe extern "C" fn anvildb_flush(handle: AnvilDbHandle) -> i32 {
     match eng.flush() {
         Ok(()) => 0,
         Err(e) => {
-            eng.set_error(e.to_string());
+            eng.set_error_from(&e);
             -1
         }
     }
@@ -578,7 +578,7 @@ pub unsafe extern "C" fn anvildb_flush_collection(
     match eng.flush_collection(collection) {
         Ok(()) => 0,
         Err(e) => {
-            eng.set_error(e.to_string());
+            eng.set_error_from(&e);
             -1
         }
     }
@@ -635,7 +635,7 @@ pub unsafe extern "C" fn anvildb_encrypt(
     match eng.encrypt(&key) {
         Ok(()) => 0,
         Err(e) => {
-            eng.set_error(e.to_string());
+            eng.set_error_from(&e);
             -1
         }
     }
@@ -668,7 +668,7 @@ pub unsafe extern "C" fn anvildb_decrypt(
     match eng.decrypt(&key) {
         Ok(()) => 0,
         Err(e) => {
-            eng.set_error(e.to_string());
+            eng.set_error_from(&e);
             -1
         }
     }
@@ -702,6 +702,18 @@ pub unsafe extern "C" fn anvildb_last_warning(handle: AnvilDbHandle) -> *const c
         Some(msg) => string_to_c(msg),
         None => std::ptr::null(),
     }
+}
+
+/// Return the numeric error code for the last error (0 = no error).
+/// The code is cleared after this call.
+#[no_mangle]
+pub unsafe extern "C" fn anvildb_last_error_code(handle: AnvilDbHandle) -> i32 {
+    let eng = match handle.as_ref() {
+        Some(e) => e,
+        None => return 0,
+    };
+
+    eng.take_error_code()
 }
 
 // ---------------------------------------------------------------------------

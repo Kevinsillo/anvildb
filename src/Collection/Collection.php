@@ -8,17 +8,34 @@ use AnvilDb\Exception\AnvilDbException;
 use AnvilDb\FFI\Bridge;
 use AnvilDb\Query\QueryBuilder;
 
+/**
+ * Represents a document collection within an AnvilDB database.
+ */
 class Collection
 {
     private \FFI\CData $handle;
     private string $name;
 
+    /**
+     * @param \FFI\CData $handle Database engine handle
+     * @param string     $name   Collection name
+     */
     public function __construct(\FFI\CData $handle, string $name)
     {
         $this->handle = $handle;
         $this->name = $name;
     }
 
+    /**
+     * Insert a single document into the collection.
+     *
+     * @param array<string, mixed> $document Document data as an associative array
+     *
+     * @return array<string, mixed> The inserted document (with generated ID)
+     *
+     * @throws AnvilDbException If the insert fails
+     * @throws \JsonException   If encoding/decoding fails
+     */
     public function insert(array $document): array
     {
         $ffi = Bridge::get();
@@ -41,6 +58,16 @@ class Collection
         return json_decode($resultJson, true, 512, JSON_THROW_ON_ERROR);
     }
 
+    /**
+     * Insert multiple documents into the collection in a single operation.
+     *
+     * @param array<int, array<string, mixed>> $documents Array of document arrays
+     *
+     * @return array<int, array<string, mixed>> The inserted documents
+     *
+     * @throws AnvilDbException If the bulk insert fails
+     * @throws \JsonException   If encoding/decoding fails
+     */
     public function bulkInsert(array $documents): array
     {
         $ffi = Bridge::get();
@@ -63,6 +90,15 @@ class Collection
         return json_decode($resultJson, true, 512, JSON_THROW_ON_ERROR);
     }
 
+    /**
+     * Find a document by its ID.
+     *
+     * @param string $id Document ID
+     *
+     * @return array<string, mixed>|null The document, or null if not found
+     *
+     * @throws \JsonException If decoding fails
+     */
     public function find(string $id): ?array
     {
         $ffi = Bridge::get();
@@ -82,6 +118,17 @@ class Collection
         return json_decode($resultJson, true, 512, JSON_THROW_ON_ERROR);
     }
 
+    /**
+     * Update a document by its ID.
+     *
+     * @param string               $id   Document ID
+     * @param array<string, mixed> $data Fields to update
+     *
+     * @return bool True if the document was updated
+     *
+     * @throws AnvilDbException If the update fails
+     * @throws \JsonException   If encoding fails
+     */
     public function update(string $id, array $data): bool
     {
         $ffi = Bridge::get();
@@ -97,6 +144,15 @@ class Collection
         return $result === 0;
     }
 
+    /**
+     * Delete a document by its ID.
+     *
+     * @param string $id Document ID
+     *
+     * @return bool True if the document was deleted
+     *
+     * @throws AnvilDbException If the delete fails
+     */
     public function delete(string $id): bool
     {
         $ffi = Bridge::get();
@@ -111,36 +167,89 @@ class Collection
         return $result === 0;
     }
 
+    /**
+     * Start a query with a where clause.
+     *
+     * @param string $field    Field name to filter on
+     * @param string $operator Comparison operator (e.g. '=', '>', '<')
+     * @param mixed  $value    Value to compare against
+     *
+     * @return QueryBuilder
+     */
     public function where(string $field, string $operator, mixed $value): QueryBuilder
     {
         return (new QueryBuilder($this->handle, $this->name))
             ->where($field, $operator, $value);
     }
 
+    /**
+     * Start a query filtering by a range (inclusive).
+     *
+     * @param string $field Field name
+     * @param mixed  $min   Minimum value
+     * @param mixed  $max   Maximum value
+     *
+     * @return QueryBuilder
+     */
     public function whereBetween(string $field, mixed $min, mixed $max): QueryBuilder
     {
         return (new QueryBuilder($this->handle, $this->name))
             ->whereBetween($field, $min, $max);
     }
 
+    /**
+     * Start a query filtering where a field matches any value in the list.
+     *
+     * @param string       $field  Field name
+     * @param array<mixed> $values Allowed values
+     *
+     * @return QueryBuilder
+     */
     public function whereIn(string $field, array $values): QueryBuilder
     {
         return (new QueryBuilder($this->handle, $this->name))
             ->whereIn($field, $values);
     }
 
+    /**
+     * Start a query filtering where a field does not match any value in the list.
+     *
+     * @param string       $field  Field name
+     * @param array<mixed> $values Excluded values
+     *
+     * @return QueryBuilder
+     */
     public function whereNotIn(string $field, array $values): QueryBuilder
     {
         return (new QueryBuilder($this->handle, $this->name))
             ->whereNotIn($field, $values);
     }
 
+    /**
+     * Start a query filtering by a regular expression pattern.
+     *
+     * @param string $field   Field name
+     * @param string $pattern Regex pattern
+     *
+     * @return QueryBuilder
+     */
     public function whereRegex(string $field, string $pattern): QueryBuilder
     {
         return (new QueryBuilder($this->handle, $this->name))
             ->whereRegex($field, $pattern);
     }
 
+    /**
+     * Start a query with a join to another collection.
+     *
+     * @param string      $collection Target collection name
+     * @param string      $leftField  Field on this collection
+     * @param string      $rightField Field on the target collection
+     * @param string      $type       Join type ('inner', 'left')
+     * @param string|null $prefix     Optional prefix for joined fields
+     *
+     * @return QueryBuilder
+     */
     public function join(
         string $collection,
         string $leftField,
@@ -152,6 +261,16 @@ class Collection
             ->join($collection, $leftField, $rightField, $type, $prefix);
     }
 
+    /**
+     * Start a query with a left join to another collection.
+     *
+     * @param string      $collection Target collection name
+     * @param string      $leftField  Field on this collection
+     * @param string      $rightField Field on the target collection
+     * @param string|null $prefix     Optional prefix for joined fields
+     *
+     * @return QueryBuilder
+     */
     public function leftJoin(
         string $collection,
         string $leftField,
@@ -162,22 +281,54 @@ class Collection
             ->leftJoin($collection, $leftField, $rightField, $prefix);
     }
 
+    /**
+     * Start a query with an ordering clause.
+     *
+     * @param string $field     Field to sort by
+     * @param string $direction Sort direction ('asc' or 'desc')
+     *
+     * @return QueryBuilder
+     */
     public function orderBy(string $field, string $direction = 'asc'): QueryBuilder
     {
         return (new QueryBuilder($this->handle, $this->name))
             ->orderBy($field, $direction);
     }
 
+    /**
+     * Retrieve all documents in the collection.
+     *
+     * @return array<int, array<string, mixed>> All documents
+     *
+     * @throws AnvilDbException If the query fails
+     */
     public function all(): array
     {
         return (new QueryBuilder($this->handle, $this->name))->get();
     }
 
+    /**
+     * Count all documents in the collection.
+     *
+     * @return int Number of documents
+     *
+     * @throws AnvilDbException If the count fails
+     */
     public function count(): int
     {
         return (new QueryBuilder($this->handle, $this->name))->count();
     }
 
+    /**
+     * Create an index on a field.
+     *
+     * @param string $field Field name to index
+     * @param string $type  Index type ('hash', 'btree', etc.)
+     *
+     * @return void
+     *
+     * @throws AnvilDbException If index creation fails
+     */
     public function createIndex(string $field, string $type = 'hash'): void
     {
         $ffi = Bridge::get();
@@ -190,6 +341,15 @@ class Collection
         }
     }
 
+    /**
+     * Drop an index on a field.
+     *
+     * @param string $field Field name whose index should be dropped
+     *
+     * @return void
+     *
+     * @throws AnvilDbException If dropping the index fails
+     */
     public function dropIndex(string $field): void
     {
         $ffi = Bridge::get();
@@ -202,6 +362,16 @@ class Collection
         }
     }
 
+    /**
+     * Set a validation schema for this collection.
+     *
+     * @param array<string, mixed> $schema Schema definition
+     *
+     * @return void
+     *
+     * @throws AnvilDbException If setting the schema fails
+     * @throws \JsonException   If encoding fails
+     */
     public function setSchema(array $schema): void
     {
         $ffi = Bridge::get();
@@ -215,6 +385,13 @@ class Collection
         }
     }
 
+    /**
+     * Flush buffered writes for this collection to disk.
+     *
+     * @return void
+     *
+     * @throws AnvilDbException If the flush fails
+     */
     public function flush(): void
     {
         $ffi = Bridge::get();
@@ -227,6 +404,16 @@ class Collection
         }
     }
 
+    /**
+     * Export all documents to a CSV file.
+     *
+     * @param string             $filePath Output CSV file path
+     * @param array<string>|null $fields   Columns to export (defaults to keys of first document)
+     *
+     * @return int Number of documents exported
+     *
+     * @throws AnvilDbException If the file cannot be opened
+     */
     public function exportCsv(string $filePath, ?array $fields = null): int
     {
         $docs = $this->all();
@@ -259,6 +446,15 @@ class Collection
         return count($docs);
     }
 
+    /**
+     * Import documents from a CSV file into the collection.
+     *
+     * @param string $filePath Path to the CSV file
+     *
+     * @return int Number of documents imported
+     *
+     * @throws AnvilDbException If the file cannot be read or insert fails
+     */
     public function importCsv(string $filePath): int
     {
         $fp = fopen($filePath, 'r');
@@ -321,6 +517,11 @@ class Collection
         return $val;
     }
 
+    /**
+     * Get the collection name.
+     *
+     * @return string
+     */
     public function getName(): string
     {
         return $this->name;

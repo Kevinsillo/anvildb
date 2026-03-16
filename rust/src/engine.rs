@@ -24,6 +24,7 @@ pub struct Engine {
     pub collections: Arc<RwLock<HashMap<String, LazyCollection>>>,
     pub cache: Mutex<LruCache>,
     pub last_error: Mutex<Option<String>>,
+    pub last_error_code: Mutex<i32>,
     pub last_warning: Mutex<Option<String>>,
     encryption_key: RwLock<Option<[u8; 32]>>,
     buffer: Arc<WriteBuffer>,
@@ -88,6 +89,7 @@ impl Engine {
             collections,
             cache: Mutex::new(LruCache::new()),
             last_error: Mutex::new(None),
+            last_error_code: Mutex::new(0),
             last_warning: Mutex::new(open_warning),
             encryption_key: RwLock::new(encryption_key.copied()),
             buffer,
@@ -181,10 +183,24 @@ impl Engine {
         }
     }
 
-    /// Set the last error message.
+    /// Set the last error message (with a generic error code of -1).
     pub fn set_error(&self, msg: String) {
         if let Ok(mut err) = self.last_error.lock() {
             *err = Some(msg);
+        }
+        if let Ok(mut code) = self.last_error_code.lock() {
+            *code = -1;
+        }
+    }
+
+    /// Set the last error from a `DbError`, capturing both the message and
+    /// the numeric error code.
+    pub fn set_error_from(&self, error: &crate::error::DbError) {
+        if let Ok(mut err) = self.last_error.lock() {
+            *err = Some(error.to_string());
+        }
+        if let Ok(mut code) = self.last_error_code.lock() {
+            *code = error.code();
         }
     }
 
@@ -194,6 +210,17 @@ impl Engine {
             err.take()
         } else {
             None
+        }
+    }
+
+    /// Get and clear the last error code. Returns 0 when there is no error.
+    pub fn take_error_code(&self) -> i32 {
+        if let Ok(mut code) = self.last_error_code.lock() {
+            let c = *code;
+            *code = 0;
+            c
+        } else {
+            0
         }
     }
 

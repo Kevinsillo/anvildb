@@ -44,6 +44,7 @@ void anvildb_clear_cache(AnvilDbHandle handle);
 
 // Errors + Warnings
 const char* anvildb_last_error(AnvilDbHandle handle);
+int32_t anvildb_last_error_code(AnvilDbHandle handle);
 const char* anvildb_last_warning(AnvilDbHandle handle);
 
 // Memory management
