@@ -11,6 +11,8 @@ use PHPUnit\Framework\TestCase;
 /**
  * Concurrency test — spawns multiple PHP child processes writing simultaneously
  * to the same AnvilDB instance to verify data integrity under contention.
+ *
+ * @group stress
  */
 class ConcurrencyTest extends TestCase
 {
