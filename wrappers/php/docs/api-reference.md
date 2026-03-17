@@ -1,4 +1,6 @@
-# API Reference
+# API Reference (PHP)
+
+[< Back to README](../README.md)
 
 ## AnvilDb (Main Facade)
 
@@ -189,7 +191,7 @@ Shorthand for `join()` with `$type = 'left'`. Unmatched left rows are included w
 
 ### `where(string $field, string $operator, mixed $value): self`
 
-Adds a filter. Chainable. Operators: `=`, `!=`, `>`, `<`, `>=`, `<=`, `contains`, `between`, `in`, `not_in`, `regex`.
+Adds a filter. Chainable. Operators: `=`, `!=`, `>`, `<`, `>=`, `<=`, `contains`, `between`, `in`, `not_in`.
 
 ### `whereBetween(string $field, mixed $min, mixed $max): self`
 
@@ -202,10 +204,6 @@ Matches documents where the field value is in the given array.
 ### `whereNotIn(string $field, array $values): self`
 
 Matches documents where the field value is NOT in the given array.
-
-### `whereRegex(string $field, string $pattern): self`
-
-Matches documents where the field value matches the regex pattern.
 
 ### `sum(string $field, ?string $alias = null): self`
 ### `avg(string $field, ?string $alias = null): self`

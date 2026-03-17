@@ -2,18 +2,11 @@
 /target/
 
 # PHP dependencies
-/vendor/
-
-# Runtime data
-/data/collections/*.json
-/data/indexes/*.idx.json
-
-# Logs
-/logs/*.log
+/wrappers/php/vendor/
 
 # Lock files (keep composer.lock)
 *.lock
-!composer.lock
+!wrappers/php/composer.lock
 
 # Environment
 .env
@@ -30,13 +23,12 @@
 *.swo
 *~
 
-# Folders files
+# Runtime data
 data/
 logs/
 
-# Precompiled binaries (distributed via GitHub Releases)
-/lib/*/libanvildb.*
-/lib/*/anvildb.*
+# Precompiled binaries (distributed via GitHub Releases, not in monorepo)
+/wrappers/php/lib/
 
 # OS files
 .DS_Store

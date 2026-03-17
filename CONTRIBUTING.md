@@ -20,18 +20,18 @@ PRs without an associated accepted issue will be closed. This applies to bug fix
    git clone https://github.com/<your-user>/anvildb.git
    cd anvildb
    ```
-2. Install PHP dependencies:
-   ```bash
-   composer install
-   ```
-3. Install Rust toolchain: https://rustup.rs
-4. Build the native library:
+2. Install Rust toolchain: https://rustup.rs
+3. Build the native library:
    ```bash
    cargo build
    ```
+4. Install PHP dependencies:
+   ```bash
+   cd wrappers/php && composer install
+   ```
 5. Verify everything works:
    ```bash
-   cargo test && ./vendor/bin/phpunit
+   cargo test && cd wrappers/php && ./vendor/bin/phpunit
    ```
 
 ## Development Workflow
@@ -45,7 +45,7 @@ PRs without an associated accepted issue will be closed. This applies to bug fix
 2. Make your changes
 3. Run **all** tests before pushing:
    ```bash
-   cargo test && ./vendor/bin/phpunit
+   cargo test && cd wrappers/php && ./vendor/bin/phpunit
    ```
 4. Submit a pull request referencing the issue (e.g. `Closes #12`)
 
@@ -89,18 +89,22 @@ Changes typically touch both Rust and PHP sides:
 
 | What you're changing | Rust files | PHP files |
 |---|---|---|
-| New FFI function | `rust/src/lib.rs` + business logic module | `src/FFI/anvildb.h` + wrapper class |
-| New query operator | `rust/src/query/engine.rs` | `src/Query/QueryBuilder.php` |
-| New index type | `rust/src/index/` | `src/Collection/Collection.php` |
+| New FFI function | `core/src/ffi.rs` + business logic module | `wrappers/php/src/FFI/anvildb.h` + wrapper class |
+| New query operator | `core/src/query/engine.rs` | `wrappers/php/src/Query/QueryBuilder.php` |
+| New index type | `core/src/index/` | `wrappers/php/src/Collection/Collection.php` |
 | Bug fix | Depends on the bug | Depends on the bug |
 
 When adding a new FFI function:
 
-1. Add the function signature to `src/FFI/anvildb.h`
-2. Implement the `extern "C"` function in `rust/src/lib.rs`
+1. Add the function signature to `wrappers/php/src/FFI/anvildb.h`
+2. Implement the `extern "C"` function in `core/src/ffi.rs`
 3. Add the business logic in the appropriate Rust module
 4. Expose via the PHP wrapper classes
-5. Add tests in both Rust (`rust/tests/`) and PHP (`tests/`)
+5. Add tests in both Rust (`core/tests/`) and PHP (`wrappers/php/tests/`)
+
+## Creating New Wrappers
+
+If you want to create a wrapper for a new language, see the [Wrapper Development Guide](docs/wrapper-development.md).
 
 ## Reporting Issues
 

@@ -20,10 +20,22 @@ class AnvilDb
     /**
      * Open an AnvilDB database at the given path.
      *
-     * @param string      $dataPath      Filesystem path to the database directory
-     * @param string|null $encryptionKey Optional encryption key for at-rest encryption
+     * Creates the data directory if it does not exist. To open an encrypted database,
+     * pass the same encryption key used during {@see encrypt()}.
      *
-     * @throws FFIException If the engine fails to open
+     * @param string      $dataPath      Filesystem path to the database directory (created if missing)
+     * @param string|null $encryptionKey 64-character hex string (32 bytes) for AES-256-GCM at-rest encryption.
+     *                                   Pass `null` for an unencrypted database.
+     *
+     * @throws FFIException If the native engine fails to load or open
+     *
+     * ```php
+     * // Unencrypted
+     * $db = new AnvilDb('/var/data/mydb');
+     *
+     * // Encrypted
+     * $db = new AnvilDb('/var/data/mydb', 'aabbccdd...64hex_chars...');
+     * ```
      */
     public function __construct(string $dataPath, ?string $encryptionKey = null)
     {
@@ -37,12 +49,7 @@ class AnvilDb
         $this->handle = $handle;
 
         // Surface any warnings from the engine (e.g. key passed to unencrypted DB)
-        $warningPtr = $ffi->anvildb_last_warning($this->handle);
-        if ($warningPtr !== null) {
-            $warning = is_string($warningPtr) ? $warningPtr : \FFI::string($warningPtr);
-            $ffi->anvildb_free_string($warningPtr);
-            trigger_error("AnvilDB: {$warning}", E_USER_WARNING);
-        }
+        $this->consumeWarnings();
     }
 
     /**
@@ -56,7 +63,11 @@ class AnvilDb
     /**
      * Close the database handle and release resources.
      *
+     * Called automatically on object destruction. Safe to call multiple times.
+     *
      * @return void
+     *
+     * @see shutdown() For a graceful shutdown that also flushes pending writes
      */
     public function close(): void
     {
@@ -70,7 +81,13 @@ class AnvilDb
     /**
      * Gracefully shut down the database engine.
      *
+     * Flushes all pending write buffers and closes the engine.
+     * The handle is no longer usable after this call.
+     *
      * @return void
+     *
+     * @see close() For closing without flushing
+     * @see flush() To flush without closing
      */
     public function shutdown(): void
     {
@@ -82,11 +99,16 @@ class AnvilDb
     }
 
     /**
-     * Flush all pending buffered writes to disk.
+     * Flush all pending buffered writes to disk across all collections.
+     *
+     * Only needed when using buffered writes ({@see configureBuffer()}).
      *
      * @return void
      *
      * @throws AnvilDbException If the flush operation fails
+     *
+     * @see configureBuffer()             To configure buffer thresholds
+     * @see Collection\Collection::flush() To flush a single collection
      */
     public function flush(): void
     {
@@ -104,12 +126,22 @@ class AnvilDb
     /**
      * Configure the write buffer size and auto-flush interval.
      *
-     * @param int $maxDocs           Maximum number of documents to buffer before flushing
-     * @param int $flushIntervalSecs Automatic flush interval in seconds
+     * When buffering is enabled, inserts are batched in memory and flushed to disk
+     * either when the document threshold is reached or the timer fires — whichever comes first.
+     *
+     * @param int $maxDocs           Per-collection document threshold that triggers an auto-flush (default: 100)
+     * @param int $flushIntervalSecs Background timer interval in seconds (default: 5)
      *
      * @return void
      *
      * @throws AnvilDbException If the configuration fails
+     *
+     * ```php
+     * $db->configureBuffer(200, 10); // flush every 200 docs or 10 seconds
+     * ```
+     *
+     * @see flush()    To manually flush all pending writes
+     * @see shutdown() Flushes automatically before closing
      */
     public function configureBuffer(int $maxDocs = 100, int $flushIntervalSecs = 5): void
     {
@@ -127,11 +159,19 @@ class AnvilDb
     /**
      * Get a collection handle for querying and manipulating documents.
      *
+     * The collection does not need to exist beforehand — it is created implicitly on first insert.
+     * Use {@see createCollection()} if you need to create it explicitly.
+     *
      * @param string $name Collection name
      *
-     * @return Collection
+     * @return Collection Fluent collection interface for CRUD, queries, indexes, and aggregations
      *
      * @throws AnvilDbException If the database is closed
+     *
+     * ```php
+     * $users = $db->collection('users');
+     * $users->insert(['name' => 'Alice']);
+     * ```
      */
     public function collection(string $name): Collection
     {
@@ -140,13 +180,18 @@ class AnvilDb
     }
 
     /**
-     * Create a new collection.
+     * Create a new collection explicitly.
+     *
+     * Not required for normal use — collections are created implicitly on first insert.
      *
      * @param string $name Collection name
      *
      * @return void
      *
-     * @throws AnvilDbException If creation fails
+     * @throws AnvilDbException If creation fails (e.g. collection already exists)
+     *
+     * @see dropCollection() To remove a collection
+     * @see collection()     To get a handle without creating explicitly
      */
     public function createCollection(string $name): void
     {
@@ -162,13 +207,17 @@ class AnvilDb
     }
 
     /**
-     * Drop an existing collection and all its documents.
+     * Drop an existing collection and all its documents and indexes.
+     *
+     * **This operation is irreversible.**
      *
      * @param string $name Collection name
      *
      * @return void
      *
-     * @throws AnvilDbException If the drop operation fails
+     * @throws AnvilDbException If the drop operation fails (e.g. collection does not exist)
+     *
+     * @see createCollection() To create a collection
      */
     public function dropCollection(string $name): void
     {
@@ -212,13 +261,24 @@ class AnvilDb
     }
 
     /**
-     * Enable at-rest encryption with the given key.
+     * Encrypt an unencrypted database with AES-256-GCM at-rest encryption.
      *
-     * @param string $key Encryption key
+     * Rewrites all collection and index files encrypted. After calling this,
+     * the same key must be passed to the constructor to open the database.
+     *
+     * @param string $key 64-character hex string (32 bytes). Generate with `bin2hex(random_bytes(32))`.
      *
      * @return void
      *
      * @throws AnvilDbException If encryption fails
+     *
+     * ```php
+     * $key = bin2hex(random_bytes(32));
+     * $db->encrypt($key);
+     * // Save $key securely — you'll need it to open the database
+     * ```
+     *
+     * @see decrypt() To remove encryption
      */
     public function encrypt(string $key): void
     {
@@ -234,13 +294,17 @@ class AnvilDb
     }
 
     /**
-     * Decrypt the database using the given key.
+     * Decrypt an encrypted database, rewriting all files without encryption.
      *
-     * @param string $key Encryption key
+     * After this call, the database can be opened without a key.
+     *
+     * @param string $key 64-character hex string used to encrypt the database
      *
      * @return void
      *
-     * @throws AnvilDbException If decryption fails
+     * @throws AnvilDbException If decryption fails (e.g. wrong key)
+     *
+     * @see encrypt() To encrypt the database
      */
     public function decrypt(string $key): void
     {
@@ -267,6 +331,33 @@ class AnvilDb
         $this->ensureOpen();
         $ffi = Bridge::get();
         $ffi->anvildb_clear_cache($this->handle);
+    }
+
+    /**
+     * Consume and surface all accumulated warnings from the engine.
+     *
+     * Each warning is emitted as an `E_USER_WARNING` via `trigger_error()`.
+     */
+    private function consumeWarnings(): void
+    {
+        $ffi = Bridge::get();
+        $ptr = $ffi->anvildb_last_warning($this->handle);
+
+        if ($ptr === null) {
+            return;
+        }
+
+        $json = is_string($ptr) ? $ptr : \FFI::string($ptr);
+        $ffi->anvildb_free_string($ptr);
+
+        $warnings = json_decode($json, true);
+        if (!is_array($warnings)) {
+            return;
+        }
+
+        foreach ($warnings as $warning) {
+            trigger_error("AnvilDB: {$warning}", E_USER_WARNING);
+        }
     }
 
     private function ensureOpen(): void

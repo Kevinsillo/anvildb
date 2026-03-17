@@ -33,13 +33,27 @@ class QueryBuilder
     }
 
     /**
-     * Add a filter condition.
+     * Add a filter condition. Multiple calls are combined with AND logic.
      *
-     * @param string $field    Field name
-     * @param string $operator Comparison operator (e.g. '=', '!=', '>', '<', '>=', '<=')
-     * @param mixed  $value    Value to compare against
+     * @param string $field    Field name (supports dot notation for nested fields)
+     * @param string $operator Comparison operator. Supported values:
+     *                         `'='`, `'!='`, `'>'`, `'<'`, `'>='`, `'<='`,
+     *                         `'contains'`, `'between'`, `'in'`, `'not_in'`
+     * @param mixed  $value    Value to compare against. Type depends on operator:
+     *                         - Scalar for `=`, `!=`, `>`, `<`, `>=`, `<=`, `contains`
+     *                         - `[min, max]` array for `between`
+     *                         - `array` for `in`, `not_in`
      *
-     * @return self
+     * @return self Chainable
+     *
+     * ```php
+     * $qb->where('age', '>=', 18)
+     *     ->where('status', '=', 'active')
+     *     ->get();
+     * ```
+     *
+     * @see whereBetween() Shorthand for range queries
+     * @see whereIn()      Shorthand for IN queries
      */
     public function where(string $field, string $operator, mixed $value): self
     {
@@ -52,15 +66,27 @@ class QueryBuilder
     }
 
     /**
-     * Add a join to another collection.
+     * Add a join to another collection. Can be called multiple times for multi-way joins.
+     *
+     * Joined fields are prefixed to avoid name collisions.
+     * Filters, sorting, and pagination apply **after** all joins.
      *
      * @param string      $collection Target collection name
-     * @param string      $leftField  Field on the current collection
-     * @param string      $rightField Field on the target collection
-     * @param string      $type       Join type ('inner', 'left')
-     * @param string|null $prefix     Optional prefix for joined fields
+     * @param string      $leftField  Field on the current collection (the left side)
+     * @param string      $rightField Field on the target collection (the right side)
+     * @param string      $type       Join type: `'inner'` (default) or `'left'`
+     * @param string|null $prefix     Prefix for joined fields (defaults to `{collection}_`)
      *
-     * @return self
+     * @return self Chainable
+     *
+     * ```php
+     * $qb->join('users', 'user_id', 'id', 'inner', 'u_')
+     *     ->join('products', 'product_id', 'id', 'inner', 'p_')
+     *     ->where('u_status', '=', 'active')
+     *     ->get();
+     * ```
+     *
+     * @see leftJoin() Shorthand for left joins
      */
     public function join(
         string $collection,
@@ -87,12 +113,17 @@ class QueryBuilder
     /**
      * Add a left join to another collection.
      *
-     * @param string      $collection Target collection name
-     * @param string      $leftField  Field on the current collection
-     * @param string      $rightField Field on the target collection
-     * @param string|null $prefix     Optional prefix for joined fields
+     * Unmatched left rows are included in results without right-side fields.
+     * Shorthand for `join($collection, $leftField, $rightField, 'left', $prefix)`.
      *
-     * @return self
+     * @param string      $collection Target collection name
+     * @param string      $leftField  Field on the current collection (the left side)
+     * @param string      $rightField Field on the target collection (the right side)
+     * @param string|null $prefix     Prefix for joined fields (defaults to `{collection}_`)
+     *
+     * @return self Chainable
+     *
+     * @see join() For inner joins or more control
      */
     public function leftJoin(
         string $collection,
@@ -104,13 +135,15 @@ class QueryBuilder
     }
 
     /**
-     * Add a between filter (inclusive range).
+     * Add a between filter (inclusive on both ends).
      *
-     * @param string $field Field name
-     * @param mixed  $min   Minimum value
-     * @param mixed  $max   Maximum value
+     * Equivalent to `where($field, 'between', [$min, $max])`.
      *
-     * @return self
+     * @param string    $field Field name
+     * @param int|float $min   Minimum value (inclusive)
+     * @param int|float $max   Maximum value (inclusive)
+     *
+     * @return self Chainable
      */
     public function whereBetween(string $field, mixed $min, mixed $max): self
     {
@@ -126,9 +159,11 @@ class QueryBuilder
      * Add an "in" filter for matching any of the given values.
      *
      * @param string       $field  Field name
-     * @param array<mixed> $values Allowed values
+     * @param array<mixed> $values Allowed values to match against
      *
-     * @return self
+     * @return self Chainable
+     *
+     * @see whereNotIn() For the inverse filter
      */
     public function whereIn(string $field, array $values): self
     {
@@ -144,9 +179,11 @@ class QueryBuilder
      * Add a "not in" filter excluding the given values.
      *
      * @param string       $field  Field name
-     * @param array<mixed> $values Excluded values
+     * @param array<mixed> $values Values to exclude from results
      *
-     * @return self
+     * @return self Chainable
+     *
+     * @see whereIn() For the inverse filter
      */
     public function whereNotIn(string $field, array $values): self
     {
@@ -159,30 +196,17 @@ class QueryBuilder
     }
 
     /**
-     * Add a regex filter.
-     *
-     * @param string $field   Field name
-     * @param string $pattern Regular expression pattern
-     *
-     * @return self
-     */
-    public function whereRegex(string $field, string $pattern): self
-    {
-        $this->filters[] = [
-            'field' => $field,
-            'op' => 'regex',
-            'value' => $pattern,
-        ];
-        return $this;
-    }
-
-    /**
      * Add a SUM aggregation.
      *
-     * @param string      $field Field to sum
-     * @param string|null $alias Optional alias for the result
+     * When any aggregation is present, `get()` returns a single result object
+     * with the computed values instead of document rows.
      *
-     * @return self
+     * @param string      $field Field to sum (must contain numeric values)
+     * @param string|null $alias Result key name (defaults to `sum_{$field}`)
+     *
+     * @return self Chainable
+     *
+     * @see groupBy() For grouped aggregations
      */
     public function sum(string $field, ?string $alias = null): self
     {
@@ -193,10 +217,12 @@ class QueryBuilder
     /**
      * Add an AVG aggregation.
      *
-     * @param string      $field Field to average
-     * @param string|null $alias Optional alias for the result
+     * @param string      $field Field to average (must contain numeric values)
+     * @param string|null $alias Result key name (defaults to `avg_{$field}`)
      *
-     * @return self
+     * @return self Chainable
+     *
+     * @see groupBy() For grouped aggregations
      */
     public function avg(string $field, ?string $alias = null): self
     {
@@ -207,10 +233,10 @@ class QueryBuilder
     /**
      * Add a MIN aggregation.
      *
-     * @param string      $field Field to find minimum of
-     * @param string|null $alias Optional alias for the result
+     * @param string      $field Field to find the minimum value of
+     * @param string|null $alias Result key name (defaults to `min_{$field}`)
      *
-     * @return self
+     * @return self Chainable
      */
     public function min(string $field, ?string $alias = null): self
     {
@@ -221,10 +247,10 @@ class QueryBuilder
     /**
      * Add a MAX aggregation.
      *
-     * @param string      $field Field to find maximum of
-     * @param string|null $alias Optional alias for the result
+     * @param string      $field Field to find the maximum value of
+     * @param string|null $alias Result key name (defaults to `max_{$field}`)
      *
-     * @return self
+     * @return self Chainable
      */
     public function max(string $field, ?string $alias = null): self
     {
@@ -233,12 +259,21 @@ class QueryBuilder
     }
 
     /**
-     * Group results by one or more fields.
+     * Group results by one or more fields with aggregations per group.
      *
-     * @param string|array<string>        $fields       Field(s) to group by
-     * @param array<array<string, mixed>> $aggregations Aggregation definitions for grouped results
+     * @param string|array<string>        $fields       Field name or array of field names to group by
+     * @param array<array<string, mixed>> $aggregations Aggregation definitions. Each entry is an associative array:
+     *                                                  `['function' => string, 'field' => string, 'alias' => string]`
+     *                                                  Supported functions: `'sum'`, `'avg'`, `'min'`, `'max'`, `'count'`
      *
-     * @return self
+     * @return self Chainable
+     *
+     * ```php
+     * $qb->groupBy('department', [
+     *     ['function' => 'avg', 'field' => 'salary', 'alias' => 'avg_salary'],
+     *     ['function' => 'count', 'field' => 'id', 'alias' => 'total'],
+     * ])->get();
+     * ```
      */
     public function groupBy(string|array $fields, array $aggregations = []): self
     {
@@ -253,10 +288,10 @@ class QueryBuilder
     /**
      * Set the sort order for query results.
      *
-     * @param string $field     Field to sort by
-     * @param string $direction Sort direction ('asc' or 'desc')
+     * @param string $field     Field name to sort by
+     * @param string $direction Sort direction: `'asc'` (default) or `'desc'`
      *
-     * @return self
+     * @return self Chainable
      */
     public function orderBy(string $field, string $direction = 'asc'): self
     {
@@ -270,9 +305,11 @@ class QueryBuilder
     /**
      * Limit the number of results returned.
      *
-     * @param int $limit Maximum number of documents
+     * @param int $limit Maximum number of documents to return
      *
-     * @return self
+     * @return self Chainable
+     *
+     * @see offset() For pagination
      */
     public function limit(int $limit): self
     {
@@ -283,9 +320,19 @@ class QueryBuilder
     /**
      * Skip a number of results (for pagination).
      *
-     * @param int $offset Number of documents to skip
+     * @param int $offset Number of documents to skip from the beginning
      *
-     * @return self
+     * @return self Chainable
+     *
+     * ```php
+     * // Page 3, 20 items per page
+     * $qb->orderBy('created_at', 'desc')
+     *     ->offset(40)
+     *     ->limit(20)
+     *     ->get();
+     * ```
+     *
+     * @see limit() To limit the number of results
      */
     public function offset(int $offset): self
     {
@@ -296,10 +343,20 @@ class QueryBuilder
     /**
      * Execute the query and return matching documents.
      *
-     * @return array<int, array<string, mixed>> Array of matching documents
+     * When aggregations are present (via `sum()`, `avg()`, etc.), returns
+     * a single-element array with the computed values instead of document rows.
+     *
+     * @return array<int, array<string, mixed>> Array of matching documents (or aggregation results)
      *
      * @throws AnvilDbException If the query fails
      * @throws \JsonException   If encoding/decoding fails
+     *
+     * ```php
+     * $results = $collection->where('active', '=', true)
+     *     ->orderBy('name')
+     *     ->limit(10)
+     *     ->get();
+     * ```
      */
     public function get(): array
     {
@@ -348,12 +405,18 @@ class QueryBuilder
     }
 
     /**
-     * Count the documents matching the current filters.
+     * Count the documents matching the current filters (without fetching them).
+     *
+     * More efficient than `count(get())` as it doesn't transfer document data.
      *
      * @return int Number of matching documents
      *
      * @throws AnvilDbException If the count fails
      * @throws \JsonException   If encoding fails
+     *
+     * ```php
+     * $total = $collection->where('status', '=', 'active')->count();
+     * ```
      */
     public function count(): int
     {

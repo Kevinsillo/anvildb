@@ -96,12 +96,6 @@ $in = $collection->whereIn('role', ['admin', 'editor'])->get();
 $inMs = (hrtime(true) - $start) / 1_000_000;
 printf($fmt, "whereIn(role, [admin,editor])", $inMs, count($in) . " results");
 
-// Regex
-$start = hrtime(true);
-$regex = $collection->whereRegex('name', '^user_1[0-9]{2}$')->get();
-$regexMs = (hrtime(true) - $start) / 1_000_000;
-printf($fmt, "whereRegex(name, ^user_1xx$)", $regexMs, count($regex) . " results");
-
 // Count with filter
 $start = hrtime(true);
 $activeCount = $collection->where('active', '=', true)->count();

@@ -1,0 +1,79 @@
+name: Subtree Split
+
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  split-php:
+    name: Split PHP Wrapper
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_branch }}
+
+      - name: Get tag name
+        id: tag
+        run: |
+          TAG=$(git describe --tags --exact-match 2>/dev/null || echo "")
+          if [ -z "$TAG" ]; then
+            echo "No tag found, skipping"
+            exit 1
+          fi
+          echo "name=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Subtree split wrappers/php
+        run: git subtree split --prefix=wrappers/php -b php-split
+
+      - name: Download release binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.tag.outputs.name }}"
+
+          git worktree add /tmp/split-work php-split
+
+          mkdir -p /tmp/split-work/lib/{x86_64-linux,aarch64-linux,x86_64-darwin,aarch64-darwin,x86_64-windows}
+          mkdir -p /tmp/archives
+
+          for platform in x86_64-linux aarch64-linux x86_64-darwin aarch64-darwin x86_64-windows; do
+            echo "Downloading anvildb-${platform}.tar.gz..."
+            gh release download "$TAG" \
+              --pattern "anvildb-${platform}.tar.gz" \
+              --dir /tmp/archives || echo "Warning: no binary for ${platform}"
+
+            if [ -f "/tmp/archives/anvildb-${platform}.tar.gz" ]; then
+              tar -xzf "/tmp/archives/anvildb-${platform}.tar.gz" -C /tmp/split-work/lib/
+            fi
+          done
+
+      - name: Commit binaries and push
+        run: |
+          TAG="${{ steps.tag.outputs.name }}"
+          cd /tmp/split-work
+
+          git add lib/
+          git commit -m "chore: add precompiled binaries for ${TAG}" || echo "No binaries to commit"
+
+          git tag -f "$TAG"
+
+          git remote add php-target "https://x-access-token:${{ secrets.SPLIT_TOKEN }}@github.com/kevinsillo/anvildb-php.git"
+          git push php-target php-split:main --force
+          git push php-target "$TAG" --force
+
+      - name: Cleanup
+        run: |
+          git worktree remove /tmp/split-work --force || true
+          git branch -D php-split || true

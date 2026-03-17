@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use regex::Regex;
 use serde_json::Value;
 
 use crate::error::{DbError, DbResult};
@@ -122,12 +121,6 @@ fn matches_filter(doc: &Value, filter: &Filter) -> bool {
         "not_in" => match (field_val, &filter.value) {
             (Some(v), Value::Array(list)) => !list.iter().any(|item| values_equal(v, item)),
             (None, Value::Array(_)) => true,
-            _ => false,
-        },
-        "regex" => match (field_val, &filter.value) {
-            (Some(Value::String(s)), Value::String(pattern)) => {
-                Regex::new(pattern).map(|re| re.is_match(s)).unwrap_or(false)
-            }
             _ => false,
         },
         _ => false,

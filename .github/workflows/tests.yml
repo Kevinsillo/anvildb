@@ -63,7 +63,9 @@ jobs:
           ini-values: ffi.enable=true
 
       - name: Install Composer dependencies
+        working-directory: wrappers/php
         run: composer install --no-interaction --prefer-dist
 
       - name: Run PHP tests
+        working-directory: wrappers/php
         run: ./vendor/bin/phpunit

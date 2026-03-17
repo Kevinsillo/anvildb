@@ -1,3 +1,10 @@
 [workspace]
-members = ["rust"]
+members = ["core"]
 resolver = "2"
+
+[profile.release]
+lto = true
+strip = true
+opt-level = 3
+codegen-units = 1
+panic = "abort"

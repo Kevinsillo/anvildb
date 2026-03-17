@@ -50,7 +50,7 @@ All operations include compression, atomic writes, schema validation, and index 
 
 ### Changes
 
-- New query operators: `between`, `in`, `not_in`, `regex`
+- New query operators: `between`, `in`, `not_in`
 - Aggregations: `sum`, `avg`, `min`, `max`, `count` with optional `group_by`
 - Range indexes (`BTreeMap`) for ordered lookups on `>`, `<`, `>=`, `<=`, `between`
 - CSV export/import

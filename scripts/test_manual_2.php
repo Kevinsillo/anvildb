@@ -32,23 +32,20 @@ $db = new AnvilDb($dataPath, $encryptionKey);
 echo "── 1. CRUD básico ──\n";
 
 $db->createCollection('users');
-$db->createCollection('orders');
-$db->createCollection('products');
+$db->createCollection('roles');
 
-$alice = $db->collection('users')->insert(['name' => 'Alice', 'email' => 'alice@mail.com', 'status' => 'active']);
-$bob   = $db->collection('users')->insert(['name' => 'Bob', 'email' => 'bob@mail.com', 'status' => 'inactive']);
-$charlie = $db->collection('users')->insert(['name' => 'Charlie', 'email' => 'charlie@mail.com', 'status' => 'active']);
+$alice = $db->collection('users')->insert(['name' => 'Alice', 'email' => 'alice@mail.com', 'role_id' => '1']);
 
-echo "Insertados 3 usuarios: Alice ({$alice['id']}), Bob ({$bob['id']}), Charlie ({$charlie['id']})\n";
+echo "Insertados 1 usuario: Alice ({$alice['id']})\n";
 
 // Find
 $found = $db->collection('users')->find($alice['id']);
 echo "Find Alice: {$found['name']} — {$found['email']}\n";
 
 // Update
-$db->collection('users')->update($bob['id'], ['name' => 'Bobby', 'email' => 'bobby@mail.com', 'status' => 'active']);
-$updated = $db->collection('users')->find($bob['id']);
-echo "Update Bob → Bobby: {$updated['name']} — {$updated['email']}\n";
+$db->collection('users')->update($alice['id'], ['name' => 'Alicia', 'email' => 'alicia@mail.com', 'role_id' => '2']);
+$updated = $db->collection('users')->find($alice['id']);
+echo "Update Alice → Alicia: {$updated['name']} — {$updated['email']}\n";
 
 // Count
 $count = $db->collection('users')->count();
@@ -129,7 +126,8 @@ $results = $db->collection('orders')
     ->get();
 
 foreach ($results as $r) {
-    printf("  Order %s | %s | total: %d | user: %s\n",
+    printf(
+        "  Order %s | %s | total: %d | user: %s\n",
         substr($r['id'], 0, 8),
         $r['status'],
         $r['total'],
@@ -164,7 +162,8 @@ $results = $db->collection('orders')
     ->get();
 
 foreach ($results as $r) {
-    printf("  %s compró %s por $%d\n",
+    printf(
+        "  %s compró %s por $%d\n",
         $r['user_name'],
         $r['product_name'],
         $r['total']
@@ -237,8 +236,13 @@ $agg = $db->collection('products')
     ->min('price', 'minimo')
     ->max('price', 'maximo')
     ->get();
-printf("  sum: $%s | avg: $%s | min: $%s | max: $%s\n",
-    $agg[0]['total'], $agg[0]['promedio'], $agg[0]['minimo'], $agg[0]['maximo']);
+printf(
+    "  sum: $%s | avg: $%s | min: $%s | max: $%s\n",
+    $agg[0]['total'],
+    $agg[0]['promedio'],
+    $agg[0]['minimo'],
+    $agg[0]['maximo']
+);
 
 // Group by
 $grouped = $db->collection('products')

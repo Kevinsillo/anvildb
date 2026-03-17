@@ -1,20 +1,22 @@
 # Testing Guide
 
+[< Back to index](index.md)
+
 ## Overview
 
 The project has two test suites:
 
 | Suite | Language | Tool | Location |
 |-------|----------|------|----------|
-| Rust integration tests | Rust | `cargo test` | `rust/tests/integration_test.rs` |
-| PHP integration tests | PHP | PHPUnit | `tests/Integration/AnvilDbTest.php` |
+| Rust integration tests | Rust | `cargo test` | `core/tests/integration_test.rs` |
+| PHP integration tests | PHP | PHPUnit | `wrappers/php/tests/Integration/AnvilDbTest.php` |
 
 ## Running Tests
 
 ### All Tests
 
 ```bash
-cargo test && ./vendor/bin/phpunit
+cargo test && cd wrappers/php && ./vendor/bin/phpunit
 ```
 
 ### Rust Tests Only
@@ -32,7 +34,7 @@ cargo test
 - Lazy loading (list without loading, partial loading, lazy join)
 - Compression (transparent, file format verification)
 - Encryption (encrypted DB, encrypt/decrypt existing, wrong key, key required)
-- New operators (between, in, not_in, regex)
+- New operators (between, in, not_in)
 - Aggregations (sum, avg, min, max, count, group_by with filters)
 - Range indexes (create, persist, drop)
 - Index operations (hash, unique, duplicate rejection)
@@ -44,6 +46,8 @@ cargo test
 ### PHP Tests Only
 
 ```bash
+cd wrappers/php
+composer install   # first time only
 ./vendor/bin/phpunit
 ```
 
@@ -61,7 +65,7 @@ cargo test
 
 ### Rust
 
-Add test functions to `rust/tests/integration_test.rs` or create new test files in `rust/tests/`.
+Add test functions to `core/tests/integration_test.rs` or create new test files in `core/tests/`.
 
 ```rust
 #[test]
@@ -75,7 +79,7 @@ fn test_my_feature() {
 
 ### PHP
 
-Add test methods to `tests/Integration/AnvilDbTest.php` or create new test classes in `tests/`.
+Add test methods to `wrappers/php/tests/Integration/AnvilDbTest.php` or create new test classes in `wrappers/php/tests/`.
 
 ```php
 public function testMyFeature(): void
@@ -95,6 +99,6 @@ Both test suites use temporary directories created in `setUp`/test setup and cle
 
 ## Environment
 
-- The `.so` must be built before running PHP tests (`cargo build`)
+- The `.so` must be built before running PHP tests (`cargo build` from the project root)
 - PHP FFI extension must be enabled (`ffi.enable=true`)
 - No database or external service required

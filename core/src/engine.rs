@@ -25,7 +25,7 @@ pub struct Engine {
     pub cache: Mutex<LruCache>,
     pub last_error: Mutex<Option<String>>,
     pub last_error_code: Mutex<i32>,
-    pub last_warning: Mutex<Option<String>>,
+    pub warnings: Mutex<Vec<String>>,
     encryption_key: RwLock<Option<[u8; 32]>>,
     buffer: Arc<WriteBuffer>,
     shutdown: Arc<(Mutex<bool>, Condvar)>,
@@ -46,11 +46,11 @@ impl Engine {
             return Err(DbError::EncryptionRequired);
         }
 
-        let open_warning = if existed && !metadata.encrypted && encryption_key.is_some() {
-            Some("Encryption key provided but database is not encrypted".to_string())
-        } else {
-            None
-        };
+        let mut initial_warnings: Vec<String> = Vec::new();
+
+        if existed && !metadata.encrypted && encryption_key.is_some() {
+            initial_warnings.push("Encryption key provided but database is not encrypted".to_string());
+        }
 
         // New database with key → mark as encrypted from the start
         if !existed && encryption_key.is_some() {
@@ -90,7 +90,7 @@ impl Engine {
             cache: Mutex::new(LruCache::new()),
             last_error: Mutex::new(None),
             last_error_code: Mutex::new(0),
-            last_warning: Mutex::new(open_warning),
+            warnings: Mutex::new(initial_warnings),
             encryption_key: RwLock::new(encryption_key.copied()),
             buffer,
             shutdown,
@@ -224,12 +224,19 @@ impl Engine {
         }
     }
 
-    /// Get and clear the last warning message.
-    pub fn take_warning(&self) -> Option<String> {
-        if let Ok(mut warn) = self.last_warning.lock() {
-            warn.take()
+    /// Add a warning message to the accumulator.
+    pub fn push_warning(&self, msg: String) {
+        if let Ok(mut warnings) = self.warnings.lock() {
+            warnings.push(msg);
+        }
+    }
+
+    /// Take and clear all accumulated warnings.
+    pub fn take_warnings(&self) -> Vec<String> {
+        if let Ok(mut warnings) = self.warnings.lock() {
+            std::mem::take(&mut *warnings)
         } else {
-            None
+            Vec::new()
         }
     }
 

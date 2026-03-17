@@ -1173,23 +1173,6 @@ fn test_not_in_operator() {
     cleanup(&path);
 }
 
-#[test]
-fn test_regex_operator() {
-    let path = temp_dir("op_regex");
-    let engine = Engine::open(&path, None).unwrap();
-    setup_operator_data(&engine);
-
-    // Match names ending in "t"
-    let results = engine.query(r#"{
-        "collection": "items",
-        "filters": [{"field": "name", "op": "regex", "value": "t$"}]
-    }"#).unwrap();
-
-    assert_eq!(results.len(), 3); // Carrot, Dragonfruit, Eggplant
-
-    cleanup(&path);
-}
-
 // ---------------------------------------------------------------------------
 // 14. Aggregations
 // ---------------------------------------------------------------------------

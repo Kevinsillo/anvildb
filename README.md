@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/logotipo.png" alt="AnvilDB" width="300">
+  <img src="docs/logotipo.png" alt="AnvilDB" width="648">
 </p>
 
 <p align="center">
@@ -9,23 +9,17 @@
   <a href="https://github.com/Kevinsillo/anvildb/actions/workflows/tests.yml"><img src="https://github.com/Kevinsillo/anvildb/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
 </p>
 
-<p align="center"><strong>Embedded JSON document database for PHP, powered by a Rust core via FFI.</strong></p>
+<p align="center"><strong>Embedded JSON document database powered by a Rust core, with language wrappers via FFI.</strong></p>
 
 <p align="center">Zero external dependencies. No MySQL, PostgreSQL, SQLite, or PDO required. Just your filesystem and raw speed.</p>
 
 ---
 
-## Why AnvilDB?
+## Motivation
 
-| | AnvilDB | PHP `json_encode` | SQLite |
-|---|---|---|---|
-| External dependencies | None | None | ext-pdo + ext-sqlite3 |
-| Serialization speed | `serde_json` (Rust) | Native PHP | C library |
-| Concurrency safety | `flock` + `RwLock` | Manual | WAL mode |
-| In-memory indexing | Hash + Unique | None | B-Tree |
-| Query cache | LRU (auto-invalidated) | None | Page cache |
-| Atomic writes | temp file + rename | Manual | Journal/WAL |
-| Schema validation | Built-in | Manual | SQL constraints |
+AnvilDB was born out of a real need: working in environments where you have no installation permissions on the operating system. Without being able to install MySQL, PostgreSQL, or additional extensions, I needed a lightweight database with zero external dependencies that could run on the filesystem alone.
+
+The goal was to have something fast for scaffolding projects and prototyping ideas without friction — an implementation that is often temporary, but needs to work from the very first moment with no configuration or infrastructure. Just copy, use, and move on.
 
 ## Features
 
@@ -46,170 +40,27 @@
 
 ## Wrappers
 
-| Language | Status | Package |
-|----------|--------|---------|
-| PHP | Included | Fluent API, query builder, filters, sorting, pagination |
+The core exposes a C API (`anvildb.h`) — any language with FFI support can integrate.
 
-More wrappers coming soon. The core exposes a C API (`anvildb.h`) — any language with FFI support can integrate.
+| Language | Package | Status |
+|----------|---------|--------|
+| PHP | [anvildb-php](https://github.com/kevinsillo/anvildb-php) | Available |
 
-## Requirements
-
-- PHP >= 8.1 with FFI extension enabled (`ffi.enable=true` in php.ini)
-- Rust toolchain (only for building from source)
-
-## Installation
-
-```bash
-composer require kevinsillo/anvildb
-```
-
-Build the native library:
-
-```bash
-cargo build --release
-```
-
-The shared library will be at `target/release/libanvildb.so`. The PHP wrapper auto-detects it.
-
-## Quick Start
-
-```php
-<?php
-
-use AnvilDb\AnvilDb;
-
-// Open database (data is compressed on disk automatically)
-$db = new AnvilDb(__DIR__ . '/data');
-
-// Or with encryption (64-char hex key = 32 bytes AES-256)
-// $db = new AnvilDb(__DIR__ . '/data', 'your-64-char-hex-key-here...');
-
-// Create a collection
-$db->createCollection('users');
-$users = $db->collection('users');
-
-// Insert — returns document with auto-generated UUID
-$user = $users->insert([
-    'name'  => 'Kevin',
-    'role'  => 'admin',
-    'age'   => 30,
-]);
-
-// Find by ID
-$found = $users->find($user['id']);
-
-// Update
-$users->update($user['id'], [
-    'name'  => 'Kevin',
-    'role'  => 'admin',
-    'age'   => 31,
-]);
-
-// Delete
-$users->delete($user['id']);
-
-// Close
-$db->close();
-```
-
-## Queries
-
-```php
-$results = $db->collection('users')
-    ->where('role', '=', 'admin')
-    ->where('age', '>', 25)
-    ->orderBy('name', 'asc')
-    ->limit(10)
-    ->offset(20)
-    ->get();
-```
-
-Operators: `=`, `!=`, `>`, `<`, `>=`, `<=`, `contains`, `between`, `in`, `not_in`, `regex`.
-
-```php
-->whereBetween('price', 10, 100)
-->whereIn('status', ['active', 'pending'])
-->whereNotIn('role', ['banned'])
-->whereRegex('email', '^admin@')
-```
-
-### Aggregations
-
-```php
-// Single result
-$db->collection('orders')->sum('total')->avg('total')->get();
-
-// Group by
-$db->collection('orders')
-    ->groupBy('category', [
-        ['function' => 'count', 'alias' => 'total'],
-        ['function' => 'sum', 'field' => 'price', 'alias' => 'revenue'],
-    ])->get();
-```
-
-## Joins
-
-```php
-// INNER JOIN
-$results = $db->collection('orders')
-    ->join('users', 'user_id', 'id', 'inner', 'user_')
-    ->where('user_name', '=', 'Alice')
-    ->orderBy('total', 'desc')
-    ->get();
-
-// LEFT JOIN
-$results = $db->collection('users')
-    ->leftJoin('orders', 'id', 'user_id', 'order_')
-    ->get();
-
-// Multiple joins
-$results = $db->collection('order_items')
-    ->join('orders', 'order_id', 'id', 'inner', 'order_')
-    ->join('products', 'product_id', 'id', 'inner', 'product_')
-    ->get();
-```
-
-Joined fields are prefixed to avoid collisions (e.g. `user_name`, `order_total`). Filters, sorting, and pagination apply after the join.
-
-## Write Buffering
-
-Inserts are buffered in memory and flushed to disk by threshold (default: 100 docs) or timer (default: 5s).
-
-```php
-$db->configureBuffer(maxDocs: 200, flushIntervalSecs: 10);
-$db->flush();                        // manual flush (all collections)
-$db->collection('logs')->flush();    // flush single collection
-$db->shutdown();                     // flushes + closes
-```
-
-## Encryption
-
-```php
-// Create a new encrypted database (or open an existing one)
-$db = new AnvilDb('/data', 'aabbccdd...64-char-hex-key...');
-
-// Add encryption to an existing unencrypted database
-$db->encrypt('aabbccdd...64-char-hex-key...');
-
-// Remove encryption from an encrypted database
-$db->decrypt('aabbccdd...64-char-hex-key...');
-```
-
-See [API Reference](docs/api-reference.md) for the full API (indexes, schemas, collections, etc.).
+Want to create a wrapper for another language? See the [Wrapper Development Guide](docs/wrapper-development.md).
 
 ## Architecture
 
 ```
-PHP Application
+Application
     |
     v
-PHP FFI Wrapper (fluent API)
+Language Wrapper (PHP, Python, etc.)
     | JSON strings + opaque handle
     v
 Rust Core Engine (libanvildb.so)
     |  - Write Buffer (dirty tracking + batched flush)
     |  - LRU Cache (auto-invalidated)
-    |  - In-memory Indexes (Hash / Unique)
+    |  - In-memory Indexes (Hash / Unique / Range)
     |  - Query Engine (filter, join, sort, paginate)
     |  - Schema Validation
     |  - Codec (deflate compression + optional AES-256-GCM)
@@ -238,36 +89,40 @@ Full benchmark history: [BENCHMARKS.md](BENCHMARKS.md)
 
 ```
 anvildb/
-├── rust/src/          # Rust core engine (compiled to .so)
-├── src/               # PHP FFI wrapper
-│   ├── AnvilDb.php    #   Main facade
-│   ├── FFI/           #   Bridge + C header
-│   ├── Collection/    #   Collection API
-│   ├── Query/         #   Query builder
-│   └── Exception/     #   Exception classes
-├── tests/             # PHPUnit + Rust integration tests
-├── data/              # Runtime data directory
-└── lib/               # Precompiled binaries (per platform)
+├── core/                # Rust core engine
+│   ├── src/             #   Engine, FFI, storage, query, indexing
+│   └── tests/           #   Rust integration tests
+├── wrappers/php/        # PHP FFI wrapper
+│   ├── src/             #   AnvilDb, Collection, Query, FFI, Exception
+│   ├── tests/           #   PHPUnit tests
+│   └── docs/            #   PHP-specific documentation
+├── docs/                # Core documentation
+├── benchmarks/          # Benchmark scripts
+└── Cargo.toml           # Workspace root
 ```
 
-## Testing
+## Documentation
 
-```bash
-# Rust tests (51 tests)
-cargo test
-
-# PHP tests (22 tests)
-composer install
-./vendor/bin/phpunit
-
-# Both
-cargo test && ./vendor/bin/phpunit
-```
+Full documentation at [docs/index.md](docs/index.md) — development, architecture, C API reference, error codes, testing, CI/CD, wrapper development.
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
+## Acknowledgments
+
+AnvilDB is built on top of these excellent open-source projects:
+
+| Crate | Description | License |
+|-------|-------------|---------|
+| [serde](https://github.com/serde-rs/serde) / [serde_json](https://github.com/serde-rs/json) | Serialization framework & JSON support | MIT / Apache-2.0 |
+| [uuid](https://github.com/uuid-rs/uuid) | UUID generation (v4) | MIT / Apache-2.0 |
+| [miniz_oxide](https://github.com/Frommi/miniz_oxide) | Pure Rust deflate compression | MIT / Apache-2.0 |
+| [aes-gcm](https://github.com/RustCrypto/AEADs) | AES-256-GCM authenticated encryption | MIT / Apache-2.0 |
+| [log](https://github.com/rust-lang/log) | Logging facade | MIT / Apache-2.0 |
+| [env_logger](https://github.com/rust-cli/env_logger) | Log output to stderr (optional, dev only) | MIT / Apache-2.0 |
+| [getrandom](https://github.com/rust-random/getrandom) | OS-level random number generation | MIT / Apache-2.0 |
+
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENCE)

@@ -52,6 +52,7 @@ pub unsafe extern "C" fn anvildb_open(
     data_path: *const c_char,
     encryption_key: *const c_char,
 ) -> AnvilDbHandle {
+    #[cfg(feature = "debug-logs")]
     let _ = env_logger::try_init();
 
     let path = match cstr_to_str(data_path) {
@@ -691,6 +692,8 @@ pub unsafe extern "C" fn anvildb_last_error(handle: AnvilDbHandle) -> *const c_c
     }
 }
 
+/// Return all accumulated warnings as a JSON array and clear them.
+/// Returns `NULL` if there are no warnings.
 #[no_mangle]
 pub unsafe extern "C" fn anvildb_last_warning(handle: AnvilDbHandle) -> *const c_char {
     let eng = match handle.as_ref() {
@@ -698,10 +701,13 @@ pub unsafe extern "C" fn anvildb_last_warning(handle: AnvilDbHandle) -> *const c
         None => return std::ptr::null(),
     };
 
-    match eng.take_warning() {
-        Some(msg) => string_to_c(msg),
-        None => std::ptr::null(),
+    let warnings = eng.take_warnings();
+    if warnings.is_empty() {
+        return std::ptr::null();
     }
+
+    let json = serde_json::to_string(&warnings).unwrap_or_else(|_| "[]".into());
+    string_to_c(json)
 }
 
 /// Return the numeric error code for the last error (0 = no error).

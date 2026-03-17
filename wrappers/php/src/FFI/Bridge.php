@@ -11,12 +11,15 @@ use AnvilDb\Exception\FFIException;
  */
 class Bridge
 {
+    /** @var AnvilDbFFI|\FFI|null */
     private static ?\FFI $ffi = null;
 
     /**
      * Get the singleton FFI instance, initializing it on first call.
      *
-     * @return \FFI The FFI handle bound to the AnvilDB shared library
+     * Returns `\FFI` at runtime, typed as {@see AnvilDbFFI} for IDE autocompletion.
+     *
+     * @return AnvilDbFFI
      *
      * @throws FFIException If the FFI extension is missing, the header is unreadable, or the library is not found
      */
@@ -60,32 +63,11 @@ class Bridge
             return $envPath;
         }
 
-        $baseDir = dirname(__DIR__, 2);
+        $wrapperDir = dirname(__DIR__, 2);      // wrappers/php/
+        $monorepoRoot = dirname($wrapperDir, 2); // project root
 
-        // Check target/release first (compiled locally)
-        $releaseLib = $baseDir . '/target/release/libanvildb.so';
-        if (file_exists($releaseLib)) {
-            return $releaseLib;
-        }
-
-        // Check target/debug
-        $debugLib = $baseDir . '/target/debug/libanvildb.so';
-        if (file_exists($debugLib)) {
-            return $debugLib;
-        }
-
-        // Detect platform and arch for precompiled binaries
         $os = PHP_OS_FAMILY;
         $arch = php_uname('m');
-
-        $platform = match (true) {
-            $os === 'Linux' && $arch === 'x86_64' => 'x86_64-linux',
-            $os === 'Linux' && str_contains($arch, 'aarch64') => 'aarch64-linux',
-            $os === 'Darwin' && $arch === 'x86_64' => 'x86_64-darwin',
-            $os === 'Darwin' && str_contains($arch, 'arm64') => 'aarch64-darwin',
-            $os === 'Windows' && $arch === 'AMD64' => 'x86_64-windows',
-            default => throw new FFIException("Unsupported platform: {$os} {$arch}"),
-        };
 
         $ext = match ($os) {
             'Darwin' => 'dylib',
@@ -95,6 +77,27 @@ class Bridge
 
         $libName = $os === 'Windows' ? "anvildb.{$ext}" : "libanvildb.{$ext}";
 
-        return $baseDir . "/lib/{$platform}/{$libName}";
+        // 1. Monorepo dev: target/release or target/debug (cargo build from root)
+        $releaseLib = $monorepoRoot . "/target/release/{$libName}";
+        if (file_exists($releaseLib)) {
+            return $releaseLib;
+        }
+
+        $debugLib = $monorepoRoot . "/target/debug/{$libName}";
+        if (file_exists($debugLib)) {
+            return $debugLib;
+        }
+
+        // 2. Distributed wrapper: lib/<platform>/ (injected by CI on subtree split)
+        $platform = match (true) {
+            $os === 'Linux' && $arch === 'x86_64' => 'x86_64-linux',
+            $os === 'Linux' && str_contains($arch, 'aarch64') => 'aarch64-linux',
+            $os === 'Darwin' && $arch === 'x86_64' => 'x86_64-darwin',
+            $os === 'Darwin' && str_contains($arch, 'arm64') => 'aarch64-darwin',
+            $os === 'Windows' && $arch === 'AMD64' => 'x86_64-windows',
+            default => throw new FFIException("Unsupported platform: {$os} {$arch}"),
+        };
+
+        return $wrapperDir . "/lib/{$platform}/{$libName}";
     }
 }

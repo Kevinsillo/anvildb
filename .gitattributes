@@ -1,16 +1,16 @@
 # Exclude from Composer export (composer archive / --prefer-dist)
 /.claude/            export-ignore
 /.github/            export-ignore
-/rust/tests/         export-ignore
-/tests/              export-ignore
-/data/               export-ignore
-/logs/               export-ignore
+/core/tests/         export-ignore
+/wrappers/php/tests/ export-ignore
+/benchmarks/         export-ignore
+/scripts/            export-ignore
+/docs/               export-ignore
 .gitignore           export-ignore
 .gitattributes       export-ignore
-phpunit.xml          export-ignore
-CONTRIBUTING.md      export-ignore
 Cargo.toml           export-ignore
 Cargo.lock           export-ignore
+CONTRIBUTING.md      export-ignore
 
 # Ensure consistent line endings
 *.php   text eol=lf
