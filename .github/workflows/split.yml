@@ -89,9 +89,8 @@ jobs:
 
           git tag -f "$TAG"
 
-          git remote add php-target "https://x-access-token:${SPLIT_TOKEN}@github.com/kevinsillo/anvildb-php.git"
-          git push php-target php-split:main --force
-          git push php-target "$TAG" --force
+          git -c http.extraheader="Authorization: token ${SPLIT_TOKEN}" push https://github.com/kevinsillo/anvildb-php.git php-split:main --force
+          git -c http.extraheader="Authorization: token ${SPLIT_TOKEN}" push https://github.com/kevinsillo/anvildb-php.git "$TAG" --force
 
       - name: Cleanup
         run: |
