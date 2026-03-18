@@ -14,8 +14,26 @@
 
 ## Installation
 
+Add the repository and require the package in your `composer.json`:
+
+```json
+{
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/kevinsillo/anvildb-php"
+        }
+    ],
+    "require": {
+        "kevinsillo/anvildb": "v0.5.0"
+    }
+}
+```
+
+Then run:
+
 ```bash
-composer require kevinsillo/anvildb
+composer update
 ```
 
 The package includes precompiled binaries for all supported platforms. No Rust toolchain needed.
