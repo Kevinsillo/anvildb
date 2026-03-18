@@ -1,6 +1,11 @@
 name: Subtree Split
 
 on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to split (e.g. v0.5.0)'
+        required: true
   workflow_run:
     workflows: ["Release"]
     types: [completed]
@@ -12,17 +17,20 @@ jobs:
   split-php:
     name: Split PHP Wrapper
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_branch }}
+          ref: ${{ github.event.inputs.tag || github.event.workflow_run.head_branch }}
 
       - name: Get tag name
         id: tag
         run: |
-          TAG=$(git describe --tags --exact-match 2>/dev/null || echo "")
+          TAG="${{ github.event.inputs.tag || '' }}"
+          if [ -z "$TAG" ]; then
+            TAG=$(git describe --tags --exact-match 2>/dev/null || echo "")
+          fi
           if [ -z "$TAG" ]; then
             echo "No tag found, skipping"
             exit 1
