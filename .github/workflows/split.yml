@@ -67,7 +67,19 @@ jobs:
             fi
           done
 
+      - name: Verify token exists
+        run: |
+          if [ -z "$SPLIT_TOKEN" ]; then
+            echo "::error::SPLIT_TOKEN secret is empty!"
+            exit 1
+          fi
+          echo "SPLIT_TOKEN is set (length: ${#SPLIT_TOKEN})"
+        env:
+          SPLIT_TOKEN: ${{ secrets.SPLIT_TOKEN }}
+
       - name: Commit binaries and push
+        env:
+          SPLIT_TOKEN: ${{ secrets.SPLIT_TOKEN }}
         run: |
           TAG="${{ steps.tag.outputs.name }}"
           cd /tmp/split-work
@@ -77,7 +89,7 @@ jobs:
 
           git tag -f "$TAG"
 
-          git remote add php-target "https://x-access-token:${{ secrets.SPLIT_TOKEN }}@github.com/kevinsillo/anvildb-php.git"
+          git remote add php-target "https://x-access-token:${SPLIT_TOKEN}@github.com/kevinsillo/anvildb-php.git"
           git push php-target php-split:main --force
           git push php-target "$TAG" --force
 
